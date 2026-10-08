@@ -1,8 +1,14 @@
+
 import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
-import { Button } from "@/components/ui/button";
+import { auth } from "@/auth";
+
 import { Sidebar } from "@/components/sidebar";
-import { ETIQUETA_ROL, NAVEGACION } from "@/lib/navegacion";
+import { Topbar } from "@/components/topbar";
+
+import {
+    NAVEGACION,
+    NAVEGACION_FUTURA,
+} from "@/lib/navegacion";
 
 export default async function DashboardLayout({
     children,
@@ -10,41 +16,45 @@ export default async function DashboardLayout({
     children: React.ReactNode;
 }) {
     const session = await auth();
-    if (!session?.user) redirect("/login");
 
-    const items = NAVEGACION.filter((i) => i.roles.includes(session.user.rol)).map(
-        ({ titulo, href }) => ({ titulo, href })
+    if (!session?.user) {
+        redirect("/login");
+    }
+
+    const rol = session.user.rol;
+
+    const items = NAVEGACION.filter((item) =>
+        item.roles.includes(rol)
     );
 
+    const futuros = NAVEGACION_FUTURA.filter((item) =>
+        item.roles.includes(rol)
+    );
+
+    const nombreUsuario = session.user.name ?? "Usuario";
+
     return (
-        <div className="flex min-h-screen">
-            <aside className="w-60 border-r bg-muted/30">
-                <div className="border-b p-4 font-semibold">Droguería Borsuas</div>
-                <Sidebar items={items} />
-            </aside>
+        <div className="flex h-dvh overflow-hidden bg-background">
+            {/* Sidebar independiente */}
+            <div className="hidden h-full shrink-0 md:block">
+                <Sidebar
+                    items={items}
+                    futuros={futuros}
+                />
+            </div>
 
-            <div className="flex flex-1 flex-col">
-                <header className="flex items-center justify-between border-b px-6 py-3">
-                    <div className="text-sm">
-                        <span className="font-medium">{session.user.name}</span>
-                        <span className="text-muted-foreground">
-                            {" "}
-                            · {ETIQUETA_ROL[session.user.rol]}
-                        </span>
-                    </div>
-                    <form
-                        action={async () => {
-                            "use server";
-                            await signOut({ redirectTo: "/login" });
-                        }}
-                    >
-                        <Button type="submit" variant="outline" size="sm">
-                            Cerrar sesión
-                        </Button>
-                    </form>
-                </header>
+            {/* Área principal */}
+            <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="z-10 shrink-0">
+                    <Topbar
+                        nombre={nombreUsuario}
+                        rol={rol}
+                    />
+                </div>
 
-                <main className="flex-1 p-6">{children}</main>
+                <main className="borsuas-content-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background p-4 md:p-6 lg:p-8">
+                    {children}
+                </main>
             </div>
         </div>
     );

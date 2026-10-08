@@ -1,7 +1,19 @@
+
+import {
+    ArrowRight,
+    Boxes,
+    CheckCircle2,
+    Package,
+    PackageX,
+    SearchX,
+    Tags,
+} from "lucide-react";
+
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { formatoMoneda } from "@/lib/formato";
-import { Badge } from "@/components/ui/badge";
+
+import { MetricCard } from "@/components/dashboard/metric-card";
 import {
     Table,
     TableBody,
@@ -10,166 +22,478 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+
 import { ProductoDialog } from "./producto-dialog";
 import { FiltrosProductos } from "./filtros";
 import { BotonCambiarEstado } from "./cambiar-estado";
 
+type Filtros = {
+    q?: string;
+    cat?: string;
+    mon?: string;
+    est?: string;
+    page?: string;
+};
+
 export default async function ProductosPage({
     searchParams,
 }: {
-    searchParams: Promise<{ q?: string; cat?: string; mon?: string; est?: string; page?: string }>;
+    searchParams: Promise<Filtros>;
 }) {
-    // 1. Validar permisos
-    const usuario = await exigirRol(["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL"]);
-    const puedeGestionar = ["SUPER_ADMIN", "ADMIN", "COMPRAS"].includes(usuario.rol);
+    const usuario = await exigirRol([
+        "SUPER_ADMIN",
+        "ADMIN",
+        "COMPRAS",
+        "COMERCIAL",
+    ]);
+
+    const puedeGestionar = [
+        "SUPER_ADMIN",
+        "ADMIN",
+        "COMPRAS",
+    ].includes(usuario.rol);
+
     const puedeVerCostos = puedeGestionar;
 
-    // 2. Extraer parámetros de búsqueda de la URL
     const filtros = await searchParams;
-    const query = filtros?.q || "";
-    const categoriaId = filtros?.cat ? Number(filtros.cat) : undefined;
-    const monedaFiltro = filtros?.mon || "";
-    const filtroEstado = filtros?.est || "activos";
 
-    // 3. Construir la consulta "Where" para Prisma
+    const query = (filtros.q ?? "").trim();
+    const categoriaId = filtros.cat
+        ? Number(filtros.cat)
+        : undefined;
+    const monedaFiltro = filtros.mon ?? "";
+    const filtroEstado = filtros.est ?? "activos";
+
     const whereCondition: any = {};
 
     if (query) {
         whereCondition.OR = [
-            { nombre: { contains: query, mode: "insensitive" } },
-            { codigo: { contains: query, mode: "insensitive" } },
+            {
+                nombre: {
+                    contains: query,
+                    mode: "insensitive",
+                },
+            },
+            {
+                codigo: {
+                    contains: query,
+                    mode: "insensitive",
+                },
+            },
         ];
     }
 
-    if (categoriaId) {
+    if (categoriaId && Number.isInteger(categoriaId)) {
         whereCondition.categoriaId = categoriaId;
     }
 
-    if (monedaFiltro) {
-        whereCondition.moneda = monedaFiltro; // <-- NUEVO: Filtra por PEN o USD
+    if (monedaFiltro === "PEN" || monedaFiltro === "USD") {
+        whereCondition.moneda = monedaFiltro;
     }
 
-    if (filtroEstado === "activos") whereCondition.estado = true;
-    else if (filtroEstado === "inactivos") whereCondition.estado = false;
+    if (filtroEstado === "activos") {
+        whereCondition.estado = true;
+    } else if (filtroEstado === "inactivos") {
+        whereCondition.estado = false;
+    }
 
-    // 4. Consultar Categorías (para el selector) y Productos (para la tabla)
-    const categorias = await prisma.categoria.findMany({ orderBy: { nombre: "asc" } });
+    const [
+        categorias,
+        productos,
+        totalFiltrados,
+        totalProductos,
+        productosActivos,
+        productosInactivos,
+        categoriasUtilizadas,
+    ] = await Promise.all([
+        prisma.categoria.findMany({
+            orderBy: { nombre: "asc" },
+            select: { id: true, nombre: true },
+        }),
 
-    const productos = await prisma.producto.findMany({
-        where: whereCondition,
-        orderBy: { id: "desc" },
-        take: 15, // Paginación básica (Sprint 1)
-        select: {
-            id: true,
-            codigo: true,
-            nombre: true,
-            descripcion: true,
-            categoriaId: true,
-            categoria: { select: { nombre: true } },
-            unidadMedida: true,
-            moneda: true,
-            precioVenta: true,
-            estado: true,
-            stockMinimo: true,
-            // Seguridad: El servidor NUNCA extrae de la BD el precio de compra si el rol es COMERCIAL
-            ...(puedeVerCostos ? { precioCompra: true } : {}),
-        }
-    });
+        prisma.producto.findMany({
+            where: whereCondition,
+            orderBy: { id: "desc" },
+            take: 15,
+            select: {
+                id: true,
+                codigo: true,
+                nombre: true,
+                descripcion: true,
+                categoriaId: true,
+                categoria: {
+                    select: { nombre: true },
+                },
+                unidadMedida: true,
+                moneda: true,
+                precioVenta: true,
+                estado: true,
+                stockMinimo: true,
+                ...(puedeVerCostos
+                    ? { precioCompra: true }
+                    : {}),
+            },
+        }),
+
+        prisma.producto.count({
+            where: whereCondition,
+        }),
+
+        prisma.producto.count(),
+
+        prisma.producto.count({
+            where: { estado: true },
+        }),
+
+        prisma.producto.count({
+            where: { estado: false },
+        }),
+
+        prisma.categoria.count({
+            where: {
+                productos: { some: {} },
+            },
+        }),
+    ]);
+
+    const hayFiltros =
+        Boolean(query || filtros.cat || monedaFiltro) ||
+        filtroEstado !== "activos";
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Catálogo de Productos</h1>
-                {puedeGestionar && <ProductoDialog categorias={categorias} />}
-            </div>
+        <div className="mx-auto max-w-7xl space-y-7 pb-6">
+            {/* Encabezado */}
+            <section className="space-y-4">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Catálogo</span>
+                    <ArrowRight className="h-3 w-3" />
+                    <span className="font-medium text-primary">
+                        Productos
+                    </span>
+                </div>
 
-            <FiltrosProductos categorias={categorias} />
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                            Catálogo de Productos
+                        </h1>
 
-            <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Código</TableHead>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Categoría / Unidad</TableHead>
-                            {puedeVerCostos && <TableHead className="text-right">Costo</TableHead>}
-                            <TableHead className="text-right">Precio Venta</TableHead>
-                            <TableHead className="text-center">Estado</TableHead>
-                            {puedeGestionar && <TableHead className="text-right">Acciones</TableHead>}
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {productos.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
-                                    No se encontraron productos.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            productos.map((p) => {
-                                // 1. Cálculo para la alerta visual
-                                const compra = puedeVerCostos ? Number(p.precioCompra) : 0;
-                                const venta = Number(p.precioVenta);
-                                const enPerdida = puedeVerCostos && !isNaN(compra) && !isNaN(venta) && venta < compra;
+                        <p className="mt-1.5 text-sm text-muted-foreground">
+                            Administra la información, clasificación
+                            y precios de los productos comercializados.
+                        </p>
+                    </div>
 
-                                // 2. Aplanar el producto para evitar el error Decimal (SOLUCIÓN AQUÍ)
-                                const productoPlano = {
-                                    ...p,
-                                    precioCompra: p.precioCompra?.toString(),
-                                    precioVenta: p.precioVenta?.toString(),
-                                };
+                    {puedeGestionar && (
+                        <div className="shrink-0">
+                            <ProductoDialog
+                                categorias={categorias}
+                            />
+                        </div>
+                    )}
+                </div>
+            </section>
 
-                                return (
-                                    <TableRow key={p.id}>
-                                        <TableCell className="font-medium whitespace-nowrap">{p.codigo}</TableCell>
-                                        <TableCell>
-                                            <div className="font-medium">{p.nombre}</div>
-                                            {p.descripcion && (
-                                                <div className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
-                                                    {p.descripcion}
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-sm">{p.categoria.nombre}</div>
-                                            <div className="text-xs text-muted-foreground">{p.unidadMedida}</div>
-                                        </TableCell>
+            {/* Indicadores generales */}
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricCard
+                    titulo="Productos registrados"
+                    valor={totalProductos}
+                    descripcion="Total de productos en el catálogo"
+                    icono={Package}
+                    color="blue"
+                />
 
-                                        {puedeVerCostos && (
-                                            <TableCell className="text-right whitespace-nowrap">
-                                                {formatoMoneda(p.precioCompra, p.moneda as any)}
-                                            </TableCell>
-                                        )}
+                <MetricCard
+                    titulo="Productos activos"
+                    valor={productosActivos}
+                    descripcion="Habilitados para operaciones"
+                    icono={CheckCircle2}
+                    color="green"
+                />
 
-                                        <TableCell className="text-right whitespace-nowrap">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {enPerdida && (
-                                                    <span className="flex h-2 w-2 rounded-full bg-amber-500" title="Venta bajo costo" />
-                                                )}
-                                                {formatoMoneda(p.precioVenta, p.moneda as any)}
-                                            </div>
-                                        </TableCell>
+                <MetricCard
+                    titulo="Productos inactivos"
+                    valor={productosInactivos}
+                    descripcion="Productos deshabilitados"
+                    icono={PackageX}
+                    color="amber"
+                />
 
-                                        <TableCell className="text-center">
-                                            <Badge variant={p.estado ? "default" : "secondary"}>
-                                                {p.estado ? "Activo" : "Inactivo"}
-                                            </Badge>
-                                        </TableCell>
+                <MetricCard
+                    titulo="Categorías utilizadas"
+                    valor={categoriasUtilizadas}
+                    descripcion="Categorías con productos asociados"
+                    icono={Tags}
+                    color="violet"
+                />
+            </section>
 
-                                        {puedeGestionar && (
-                                            <TableCell className="text-right whitespace-nowrap">
-                                                {/* 3. Pasar el producto aplanado aquí */}
-                                                <ProductoDialog producto={productoPlano as any} categorias={categorias} />
-                                                <BotonCambiarEstado id={p.id} estadoActual={p.estado} />
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
-                                );
-                            })
+            {/* Directorio */}
+            <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+                <div className="border-b border-border px-5 py-5 sm:px-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-primary">
+                            <Boxes className="h-5 w-5" />
+                        </div>
+
+                        <div>
+                            <h2 className="text-base font-semibold">
+                                Directorio de productos
+                            </h2>
+
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                Consulta y filtra los productos registrados.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-5">
+                        <FiltrosProductos
+                            categorias={categorias}
+                        />
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                            {totalFiltrados} producto(s) coinciden con
+                            los criterios actuales
+                        </p>
+
+                        {hayFiltros && (
+                            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
+                                Filtros aplicados
+                            </span>
                         )}
-                    </TableBody>
-                </Table>
-            </div>
+                    </div>
+                </div>
+
+                {/* Tabla */}
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-secondary/40 hover:bg-secondary/40">
+                                <TableHead className="pl-6">
+                                    Código
+                                </TableHead>
+                                <TableHead className="min-w-55">
+                                    Producto
+                                </TableHead>
+                                <TableHead className="min-w-40">
+                                    Categoría / Unidad
+                                </TableHead>
+                                {puedeVerCostos && (
+                                    <TableHead className="text-right">
+                                        Costo
+                                    </TableHead>
+                                )}
+                                <TableHead className="text-right">
+                                    Precio venta
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    Estado
+                                </TableHead>
+                                {puedeGestionar && (
+                                    <TableHead className="pr-6 text-right">
+                                        Acciones
+                                    </TableHead>
+                                )}
+                            </TableRow>
+                        </TableHeader>
+
+                        <TableBody>
+                            {productos.length === 0 ? (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={
+                                            5 +
+                                            Number(puedeVerCostos) +
+                                            Number(puedeGestionar)
+                                        }
+                                        className="h-64 text-center"
+                                    >
+                                        <div className="flex flex-col items-center gap-3">
+                                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+                                                <SearchX className="h-6 w-6 text-primary" />
+                                            </div>
+
+                                            <p className="text-sm font-semibold">
+                                                No se encontraron productos
+                                            </p>
+
+                                            <p className="text-xs text-muted-foreground">
+                                                Prueba con otros criterios
+                                                o registra un producto nuevo.
+                                            </p>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                productos.map((producto) => {
+                                    const compra =
+                                        "precioCompra" in producto
+                                            ? Number(producto.precioCompra)
+                                            : null;
+
+                                    const venta = Number(
+                                        producto.precioVenta
+                                    );
+
+                                    const bajoCosto =
+                                        puedeVerCostos &&
+                                        compra !== null &&
+                                        Number.isFinite(compra) &&
+                                        Number.isFinite(venta) &&
+                                        venta < compra;
+
+                                    // Convertimos Decimal a valores serializables.
+                                    const productoPlano = {
+                                        id: producto.id,
+                                        codigo: producto.codigo,
+                                        nombre: producto.nombre,
+                                        descripcion:
+                                            producto.descripcion,
+                                        categoriaId:
+                                            producto.categoriaId,
+                                        unidadMedida:
+                                            producto.unidadMedida,
+                                        moneda: producto.moneda,
+                                        stockMinimo:
+                                            producto.stockMinimo,
+                                        precioCompra:
+                                            "precioCompra" in producto
+                                                ? String(
+                                                    producto.precioCompra
+                                                )
+                                                : "0",
+                                        precioVenta:
+                                            producto.precioVenta.toString(),
+                                    };
+
+                                    return (
+                                        <TableRow
+                                            key={producto.id}
+                                            className="hover:bg-secondary/20"
+                                        >
+                                            <TableCell className="pl-6 font-medium text-primary">
+                                                {producto.codigo}
+                                            </TableCell>
+
+                                            <TableCell className="py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+                                                        <Package className="h-5 w-5" />
+                                                    </div>
+
+                                                    <div className="min-w-0">
+                                                        <p className="font-semibold text-foreground">
+                                                            {producto.nombre}
+                                                        </p>
+
+                                                        {producto.descripcion && (
+                                                            <p className="mt-0.5 max-w-55 truncate text-xs text-muted-foreground">
+                                                                {producto.descripcion}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+
+                                            <TableCell>
+                                                <p className="text-sm font-medium">
+                                                    {producto.categoria.nombre}
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                                    {producto.unidadMedida}
+                                                </p>
+                                            </TableCell>
+
+                                            {puedeVerCostos && (
+                                                <TableCell className="whitespace-nowrap text-right text-sm">
+                                                    {compra !== null
+                                                        ? formatoMoneda(
+                                                            compra,
+                                                            producto.moneda
+                                                        )
+                                                        : "—"}
+                                                </TableCell>
+                                            )}
+
+                                            <TableCell className="whitespace-nowrap text-right">
+                                                <span className="inline-flex items-center gap-2 font-semibold">
+                                                    {bajoCosto && (
+                                                        <span
+                                                            title="Precio de venta inferior al costo"
+                                                            className="h-2 w-2 rounded-full bg-amber-500"
+                                                        />
+                                                    )}
+
+                                                    {formatoMoneda(
+                                                        producto.precioVenta,
+                                                        producto.moneda
+                                                    )}
+                                                </span>
+                                            </TableCell>
+
+                                            <TableCell className="text-center">
+                                                <span
+                                                    className={
+                                                        producto.estado
+                                                            ? "inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                                                            : "inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"
+                                                    }
+                                                >
+                                                    <span
+                                                        className={
+                                                            producto.estado
+                                                                ? "h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                                                : "h-1.5 w-1.5 rounded-full bg-slate-400"
+                                                        }
+                                                    />
+                                                    {producto.estado
+                                                        ? "Activo"
+                                                        : "Inactivo"}
+                                                </span>
+                                            </TableCell>
+
+                                            {puedeGestionar && (
+                                                <TableCell className="pr-6 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <ProductoDialog
+                                                            producto={
+                                                                productoPlano
+                                                            }
+                                                            categorias={
+                                                                categorias
+                                                            }
+                                                        />
+
+                                                        <BotonCambiarEstado
+                                                            id={producto.id}
+                                                            estadoActual={
+                                                                producto.estado
+                                                            }
+                                                        />
+                                                    </div>
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                <div className="border-t border-border bg-secondary/20 px-6 py-3">
+                    <p className="text-xs text-muted-foreground">
+                        Mostrando {productos.length} de{" "}
+                        {totalFiltrados} resultado(s).
+                        {totalFiltrados > 15 &&
+                            " La vista actual muestra los primeros 15 registros."}
+                    </p>
+                </div>
+            </section>
         </div>
     );
 }
