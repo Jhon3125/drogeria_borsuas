@@ -10,6 +10,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { UsuarioDialog } from "./usuario-dialog";
 
 export default async function UsuariosPage() {
     await exigirRol(["SUPER_ADMIN"]);
@@ -21,14 +22,17 @@ export default async function UsuariosPage() {
             email: true,
             rol: true,
             estado: true,
-            creadoEn: true,
+            intentosFallidos: true,
         },
         orderBy: { creadoEn: "desc" },
     });
 
     return (
         <div className="space-y-4">
-            <h1 className="text-2xl font-bold">Usuarios</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold">Usuarios</h1>
+                <UsuarioDialog />
+            </div>
 
             <Table>
                 <TableHeader>
@@ -37,6 +41,8 @@ export default async function UsuariosPage() {
                         <TableHead>Correo</TableHead>
                         <TableHead>Rol</TableHead>
                         <TableHead>Estado</TableHead>
+                        <TableHead>Intentos fallidos</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -49,6 +55,10 @@ export default async function UsuariosPage() {
                                 <Badge variant={u.estado === "ACTIVO" ? "default" : "destructive"}>
                                     {u.estado}
                                 </Badge>
+                            </TableCell>
+                            <TableCell>{u.intentosFallidos}</TableCell>
+                            <TableCell className="text-right">
+                                <UsuarioDialog usuario={u} />
                             </TableCell>
                         </TableRow>
                     ))}
