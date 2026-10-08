@@ -100,8 +100,8 @@ model Producto {
   codigo         String    @unique
   nombre         String
   descripcion    String?
-  precioCompra   Float     @default(0.0)
-  precioVenta    Float     @default(0.0)
+  precioCompra   Decimal   @default(0) @db.Decimal(12, 2)
+  precioVenta    Decimal   @default(0) @db.Decimal(12, 2)
   unidadMedida   String
   stockMinimo    Int       @default(0)
   estado         Boolean   @default(true)
@@ -136,7 +136,7 @@ model Compra {
   id           Int             @id @default(autoincrement())
   proveedorId  Int
   fecha        DateTime        @default(now())
-  importeTotal Float
+  importeTotal Decimal @db.Decimal(12, 2)
   estado       String          @default("COMPLETADO")
   
   proveedor    Proveedor       @relation(fields: [proveedorId], references: [id])
@@ -148,7 +148,7 @@ model DetalleCompra {
   compraId         Int
   productoId       Int
   cantidad         Int
-  precioUnitario   Float
+  precioUnitario   Decimal  @db.Decimal(12, 2)
   numeroLote       String
   fechaVencimiento DateTime
   
@@ -205,12 +205,12 @@ model Venta {
   clienteId      Int
   vendedorId     Int
   fecha          DateTime     @default(now())
-  subtotal       Float        @default(0.0)
-  descuento      Float        @default(0.0)
-  importeTotal   Float
+  subtotal       Decimal      @default(0) @db.Decimal(12, 2)
+  descuento      Decimal      @default(0) @db.Decimal(12, 2)
+  importeTotal   Decimal      @db.Decimal(12, 2)
   etapa          EtapaVenta   @default(PROSPECTO) // Define si es Cotización o Venta firme
   metodoPago     MetodoPago?
-  saldoPendiente Float        @default(0.0)
+  saldoPendiente Decimal      @default(0) @db.Decimal(12, 2)
   
   cliente        Cliente      @relation(fields: [clienteId], references: [id])
   vendedor       Usuario      @relation("Vendedor", fields: [vendedorId], references: [id])
@@ -224,8 +224,8 @@ model DetalleVenta {
   ventaId        Int
   productoId     Int
   cantidad       Int
-  precioUnitario Float
-  descuento      Float    @default(0.0)
+  precioUnitario Decimal  @db.Decimal(12, 2)
+  descuento      Decimal  @default(0) @db.Decimal(12, 2)
   
   venta          Venta    @relation(fields: [ventaId], references: [id])
   producto       Producto @relation(fields: [productoId], references: [id])
@@ -234,7 +234,7 @@ model DetalleVenta {
 model Pago {
   id          Int        @id @default(autoincrement())
   ventaId     Int
-  monto       Float
+  monto       Decimal    @db.Decimal(12, 2)
   fecha       DateTime   @default(now())
   metodoPago  MetodoPago
   
@@ -249,7 +249,7 @@ model Gasto {
   id             Int        @id @default(autoincrement())
   tipoGasto      String
   descripcion    String?
-  monto          Float
+  monto          Decimal    @db.Decimal(12, 2)
   fecha          DateTime   @default(now())
   responsableId  Int
   medioPago      MetodoPago
