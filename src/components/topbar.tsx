@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -8,10 +9,8 @@ import {
     LogOut,
     Search,
 } from "lucide-react";
-
 import { signOut } from "next-auth/react";
 
-import { Button } from "@/components/ui/button";
 import { ETIQUETA_ROL } from "@/lib/navegacion";
 
 type Props = {
@@ -21,108 +20,112 @@ type Props = {
 
 export function Topbar({ nombre, rol }: Props) {
     const [menuAbierto, setMenuAbierto] = useState(false);
+    const [cerrandoSesion, setCerrandoSesion] = useState(false);
 
-    const iniciales = nombre
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((parte) => parte[0])
-        .join("")
-        .toUpperCase();
+    const iniciales =
+        nombre
+            .trim()
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((parte) => parte[0])
+            .join("")
+            .toUpperCase() || "U";
 
     async function cerrarSesion() {
-        await signOut({
-            callbackUrl: "/login",
-        });
+        if (cerrandoSesion) return;
+
+        setCerrandoSesion(true);
+
+        try {
+            await signOut({
+                callbackUrl: "/login",
+            });
+        } catch {
+            setCerrandoSesion(false);
+        }
     }
 
     return (
-        <header className="flex h-16 items-center justify-between border-b bg-background px-6">
-            {/* Búsqueda */}
-            <div className="flex items-center">
-                <div className="relative hidden w-80 md:block">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                    <input
-                        type="text"
-                        placeholder="Buscar en Borsuas..."
-                        className="h-9 w-full rounded-lg border bg-muted/30 pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/10"
-                    />
+        <header className="flex h-16 items-center justify-between border-b border-border bg-card px-4 shadow-xs sm:px-6">
+            {/* Búsqueda global: presentación visual */}
+            <div className="flex min-w-0 items-center">
+                <div className="hidden h-10 w-80 items-center gap-3 rounded-xl border border-border bg-[#F0F5FA] px-3 text-sm text-muted-foreground md:flex">
+                    <Search className="h-4 w-4 shrink-0 text-primary" />
+                    <span>Buscar en Borsuas...</span>
                 </div>
+
+                <span className="text-sm font-bold tracking-wide text-primary md:hidden">
+                    BORSUAS
+                </span>
             </div>
 
-            {/* Acciones */}
+            {/* Controles e identidad */}
             <div className="flex items-center gap-2">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground"
-                    type="button"
+                <span
+                    title="Ayuda próximamente"
+                    className="hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground sm:flex"
                 >
-                    <CircleHelp className="h-4 w-4" />
-                    <span className="sr-only">Ayuda</span>
-                </Button>
+                    <CircleHelp className="h-[18px] w-[18px]" />
+                </span>
 
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground"
-                    type="button"
+                <span
+                    title="Notificaciones próximamente"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground"
                 >
-                    <Bell className="h-4 w-4" />
-                    <span className="sr-only">Notificaciones</span>
-                </Button>
+                    <Bell className="h-[18px] w-[18px]" />
+                </span>
 
-                <div className="ml-2 h-7 w-px bg-border" />
+                <div className="mx-1 h-8 w-px bg-border" />
 
-                {/* Usuario */}
-                <div className="relative ml-1">
+                {/* Dropdown de usuario */}
+                <div className="relative">
                     <button
                         type="button"
-                        onClick={() => setMenuAbierto((abierto) => !abierto)}
-                        className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted"
+                        onClick={() =>
+                            setMenuAbierto((anterior) => !anterior)
+                        }
                         aria-expanded={menuAbierto}
                         aria-haspopup="menu"
+                        aria-label="Abrir menú de usuario"
+                        className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-secondary"
                     >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground ring-2 ring-primary/10">
                             {iniciales}
                         </div>
 
-                        <div className="hidden text-left sm:block">
-                            <p className="max-w-32 truncate text-sm font-medium">
+                        <div className="hidden max-w-36 text-left sm:block">
+                            <p className="truncate text-sm font-semibold text-foreground">
                                 {nombre}
                             </p>
 
-                            <p className="text-xs text-muted-foreground">
+                            <p className="truncate text-xs text-muted-foreground">
                                 {ETIQUETA_ROL[rol]}
                             </p>
                         </div>
 
                         <ChevronDown
-                            className={`hidden h-4 w-4 text-muted-foreground transition-transform sm:block ${menuAbierto ? "rotate-180" : ""
+                            className={`hidden h-4 w-4 text-primary transition-transform sm:block ${menuAbierto ? "rotate-180" : ""
                                 }`}
                         />
                     </button>
 
-                    {/* Dropdown */}
                     {menuAbierto && (
                         <>
-                            {/* Overlay invisible para cerrar el menú */}
                             <button
                                 type="button"
-                                aria-label="Cerrar menú"
+                                aria-label="Cerrar menú de usuario"
                                 className="fixed inset-0 z-40 cursor-default"
                                 onClick={() => setMenuAbierto(false)}
                             />
 
                             <div
-                                className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border bg-background shadow-lg"
                                 role="menu"
+                                aria-label="Opciones de usuario"
+                                className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl"
                             >
-                                {/* Información del usuario */}
-                                <div className="border-b px-4 py-3">
+                                <div className="border-b border-border bg-secondary/60 px-4 py-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
                                             {iniciales}
                                         </div>
 
@@ -138,17 +141,18 @@ export function Topbar({ nombre, rol }: Props) {
                                     </div>
                                 </div>
 
-                                {/* Opciones */}
-                                <div className="p-1.5">
+                                <div className="p-2">
                                     <button
                                         type="button"
-                                        onClick={cerrarSesion}
-                                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                         role="menuitem"
+                                        disabled={cerrandoSesion}
+                                        onClick={cerrarSesion}
+                                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary hover:text-primary disabled:cursor-wait disabled:opacity-60"
                                     >
-                                        <LogOut className="h-4 w-4" />
-
-                                        <span>Cerrar sesión</span>
+                                        <LogOut className="h-4 w-4 text-primary" />
+                                        {cerrandoSesion
+                                            ? "Cerrando sesión..."
+                                            : "Cerrar sesión"}
                                     </button>
                                 </div>
                             </div>
