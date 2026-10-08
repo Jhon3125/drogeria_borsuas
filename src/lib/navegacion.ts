@@ -24,6 +24,11 @@ export const NAVEGACION: ItemNav[] = [
         roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL"],
     },
     {
+        titulo: "Categorías",
+        href: "/dashboard/categorias",
+        roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL"],
+    },
+    {
         titulo: "Inventario",
         href: "/dashboard/inventario",
         roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL", "ALMACEN"],
