@@ -12,10 +12,285 @@ datasource db {
   provider = "postgresql"
 }
 
-// Colocar las entidades aquí
+// ==========================================
+// ENUMS (Listas de valores fijos)
+// ==========================================
+
+enum RolUsuario {
+  SUPER_ADMIN
+  ADMIN
+  COMERCIAL
+  COMPRAS
+  ALMACEN
+  CONDUCTOR
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  BLOQUEADO
+}
+
+enum EtapaVenta {
+  PROSPECTO
+  COTIZACION
+  NEGOCIACION
+  PAGADO
+  LIBERADO_DESPACHO
+  PROGRAMADO_RUTA
+  ENTREGADO
+  ANULADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  CREDITO
+}
+
+enum TipoMovimiento {
+  ENTRADA_COMPRA
+  SALIDA_VENTA
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+}
+
+enum EstadoDespacho {
+  PENDIENTE
+  EN_RUTA
+  ENTREGADO
+  REPROGRAMADO
+}
+
+// ==========================================
+// MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
+// ==========================================
+
+model Usuario {
+  id             Int           @id @default(autoincrement())
+  email          String        @unique
+  passwordHash   String
+  nombre         String
+  rol            RolUsuario
+  estado         EstadoUsuario @default(ACTIVO)
+  intentosFallidos Int         @default(0)
+  creadoEn       DateTime      @default(now())
+  actualizadoEn  DateTime      @updatedAt
+
+  // Relaciones
+  ventas         Venta[]       @relation("Vendedor")
+  hojasDeRuta    HojaRuta[]    @relation("Conductor")
+  gastos         Gasto[]       @relation("ResponsableGasto")
+}
+
+// ==========================================
+// MÓDULO 2: CATÁLOGO DE PRODUCTOS (H0003)
+// ==========================================
+
+model Categoria {
+  id          Int        @id @default(autoincrement())
+  nombre      String     @unique
+  descripcion String?
+  productos   Producto[]
+}
+
 model Producto {
-  id          Int      @id @default(autoincrement())
-  nombre      String
-  precio      Float
-  creadoEn    DateTime @default(now())
+  id             Int       @id @default(autoincrement())
+  codigo         String    @unique
+  nombre         String
+  descripcion    String?
+  precioCompra   Float     @default(0.0)
+  precioVenta    Float     @default(0.0)
+  unidadMedida   String
+  stockMinimo    Int       @default(0)
+  estado         Boolean   @default(true)
+  categoriaId    Int
+
+  // Relaciones
+  categoria      Categoria @relation(fields: [categoriaId], references: [id])
+  lotes          Lote[]
+  movimientos    MovimientoInventario[]
+  detallesCompra DetalleCompra[]
+  detallesVenta  DetalleVenta[]
+}
+
+// ==========================================
+// MÓDULO 3: PROVEEDORES, COMPRAS, LOTES E INVENTARIO (H0004, H0005)
+// ==========================================
+
+model Proveedor {
+  id           Int       @id @default(autoincrement())
+  razonSocial  String
+  ruc          String    @unique
+  contacto     String?
+  telefono     String?
+  correo       String?
+  direccion    String?
+  estado       Boolean   @default(true)
+  
+  compras      Compra[]
+}
+
+model Compra {
+  id           Int             @id @default(autoincrement())
+  proveedorId  Int
+  fecha        DateTime        @default(now())
+  importeTotal Float
+  estado       String          @default("COMPLETADO")
+  
+  proveedor    Proveedor       @relation(fields: [proveedorId], references: [id])
+  detalles     DetalleCompra[]
+}
+
+model DetalleCompra {
+  id               Int      @id @default(autoincrement())
+  compraId         Int
+  productoId       Int
+  cantidad         Int
+  precioUnitario   Float
+  numeroLote       String
+  fechaVencimiento DateTime
+  
+  compra           Compra   @relation(fields: [compraId], references: [id])
+  producto         Producto @relation(fields: [productoId], references: [id])
+}
+
+model Lote {
+  id                 Int      @id @default(autoincrement())
+  numeroLote         String
+  productoId         Int
+  cantidadInicial    Int
+  cantidadDisponible Int
+  fechaIngreso       DateTime @default(now())
+  fechaVencimiento   DateTime
+  
+  producto           Producto @relation(fields: [productoId], references: [id])
+  movimientos        MovimientoInventario[]
+
+  @@unique([numeroLote, productoId])
+}
+
+model MovimientoInventario {
+  id          Int            @id @default(autoincrement())
+  productoId  Int
+  loteId      Int?
+  tipo        TipoMovimiento
+  cantidad    Int
+  fecha       DateTime       @default(now())
+  motivo      String?
+  
+  producto    Producto       @relation(fields: [productoId], references: [id])
+  lote        Lote?          @relation(fields: [loteId], references: [id])
+}
+
+// ==========================================
+// MÓDULO 4: CRM, CLIENTES, COTIZACIONES Y VENTAS (H0006, H0007, H0008, H0009)
+// ==========================================
+
+model Cliente {
+  id             Int       @id @default(autoincrement())
+  razonSocial    String
+  documento      String    @unique // DNI o RUC
+  telefono       String?
+  correo         String?
+  direccion      String?
+  estado         Boolean   @default(true)
+  
+  ventas         Venta[]
+}
+
+model Venta {
+  id             Int          @id @default(autoincrement())
+  clienteId      Int
+  vendedorId     Int
+  fecha          DateTime     @default(now())
+  subtotal       Float        @default(0.0)
+  descuento      Float        @default(0.0)
+  importeTotal   Float
+  etapa          EtapaVenta   @default(PROSPECTO) // Define si es Cotización o Venta firme
+  metodoPago     MetodoPago?
+  saldoPendiente Float        @default(0.0)
+  
+  cliente        Cliente      @relation(fields: [clienteId], references: [id])
+  vendedor       Usuario      @relation("Vendedor", fields: [vendedorId], references: [id])
+  detalles       DetalleVenta[]
+  pagos          Pago[]
+  despachos      Despacho[]
+}
+
+model DetalleVenta {
+  id             Int      @id @default(autoincrement())
+  ventaId        Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Float
+  descuento      Float    @default(0.0)
+  
+  venta          Venta    @relation(fields: [ventaId], references: [id])
+  producto       Producto @relation(fields: [productoId], references: [id])
+}
+
+model Pago {
+  id          Int        @id @default(autoincrement())
+  ventaId     Int
+  monto       Float
+  fecha       DateTime   @default(now())
+  metodoPago  MetodoPago
+  
+  venta       Venta      @relation(fields: [ventaId], references: [id])
+}
+
+// ==========================================
+// MÓDULO 5: CAJA Y GASTOS OPERATIVOS (H0009)
+// ==========================================
+
+model Gasto {
+  id             Int        @id @default(autoincrement())
+  tipoGasto      String
+  descripcion    String?
+  monto          Float
+  fecha          DateTime   @default(now())
+  responsableId  Int
+  medioPago      MetodoPago
+  
+  responsable    Usuario    @relation("ResponsableGasto", fields: [responsableId], references: [id])
+}
+
+// ==========================================
+// MÓDULO 6: LOGÍSTICA Y DESPACHOS (H0010, H0011, H0012)
+// ==========================================
+
+model Vehiculo {
+  id          Int          @id @default(autoincrement())
+  placa       String       @unique
+  modelo      String
+  capacidad   String
+  estado      Boolean      @default(true)
+  
+  hojasDeRuta HojaRuta[]
+}
+
+model HojaRuta {
+  id          Int          @id @default(autoincrement())
+  conductorId Int
+  vehiculoId  Int
+  fecha       DateTime     @default(now())
+  estado      String       @default("ASIGNADO")
+  
+  conductor   Usuario      @relation("Conductor", fields: [conductorId], references: [id])
+  vehiculo    Vehiculo     @relation(fields: [vehiculoId], references: [id])
+  despachos   Despacho[]
+}
+
+model Despacho {
+  id             Int            @id @default(autoincrement())
+  hojaRutaId     Int
+  ventaId        Int            @unique
+  estado         EstadoDespacho @default(PENDIENTE)
+  observacion    String?
+  fechaActualizacion DateTime   @updatedAt
+  
+  hojaRuta       HojaRuta       @relation(fields: [hojaRutaId], references: [id])
+  venta          Venta          @relation(fields: [ventaId], references: [id])
 }
