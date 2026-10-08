@@ -63,6 +63,11 @@ enum EstadoDespacho {
   REPROGRAMADO
 }
 
+enum Moneda {
+  PEN
+  USD
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -102,6 +107,7 @@ model Producto {
   descripcion    String?
   precioCompra   Decimal   @default(0) @db.Decimal(12, 2)
   precioVenta    Decimal   @default(0) @db.Decimal(12, 2)
+  moneda         Moneda    @default(PEN)
   unidadMedida   String
   stockMinimo    Int       @default(0)
   estado         Boolean   @default(true)
