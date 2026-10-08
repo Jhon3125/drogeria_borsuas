@@ -1,9 +1,20 @@
 import type { RolUsuario } from "@/generated/prisma/enums";
 
+export type IconoNav =
+    | "dashboard"
+    | "users"
+    | "package"
+    | "tags"
+    | "boxes";
+
+export type GrupoNav = "principal" | "administracion";
+
 export type ItemNav = {
     titulo: string;
     href: string;
     roles: RolUsuario[];
+    icono: IconoNav;
+    grupo: GrupoNav;
 };
 
 const TODOS: RolUsuario[] = [
@@ -16,22 +27,40 @@ const TODOS: RolUsuario[] = [
 ];
 
 export const NAVEGACION: ItemNav[] = [
-    { titulo: "Inicio", href: "/dashboard", roles: TODOS },
-    { titulo: "Usuarios", href: "/dashboard/usuarios", roles: ["SUPER_ADMIN"] },
+    {
+        titulo: "Inicio",
+        href: "/dashboard",
+        roles: TODOS,
+        icono: "dashboard",
+        grupo: "principal",
+    },
     {
         titulo: "Productos",
         href: "/dashboard/productos",
         roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL"],
+        icono: "package",
+        grupo: "principal",
     },
     {
         titulo: "Categorías",
         href: "/dashboard/categorias",
         roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL"],
+        icono: "tags",
+        grupo: "principal",
     },
     {
         titulo: "Inventario",
         href: "/dashboard/inventario",
         roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "COMERCIAL", "ALMACEN"],
+        icono: "boxes",
+        grupo: "principal",
+    },
+    {
+        titulo: "Usuarios",
+        href: "/dashboard/usuarios",
+        roles: ["SUPER_ADMIN"],
+        icono: "users",
+        grupo: "administracion",
     },
 ];
 
