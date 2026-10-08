@@ -1,8 +1,11 @@
+
 import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
-import { Button } from "@/components/ui/button";
+import { auth } from "@/auth";
+
 import { Sidebar } from "@/components/sidebar";
-import { ETIQUETA_ROL, NAVEGACION } from "@/lib/navegacion";
+import { Topbar } from "@/components/topbar";
+
+import { NAVEGACION } from "@/lib/navegacion";
 
 export default async function DashboardLayout({
     children,
@@ -10,41 +13,38 @@ export default async function DashboardLayout({
     children: React.ReactNode;
 }) {
     const session = await auth();
-    if (!session?.user) redirect("/login");
 
-    const items = NAVEGACION.filter((i) => i.roles.includes(session.user.rol)).map(
-        ({ titulo, href }) => ({ titulo, href })
+    if (!session?.user) {
+        redirect("/login");
+    }
+
+    const items = NAVEGACION.filter((item) =>
+        item.roles.includes(session.user.rol)
     );
 
+    const nombreUsuario = session.user.name ?? "Usuario";
+
     return (
-        <div className="flex min-h-screen">
-            <aside className="w-60 border-r bg-muted/30">
-                <div className="border-b p-4 font-semibold">Droguería Borsuas</div>
+        <div className="flex h-dvh overflow-hidden bg-muted/30">
+            {/* Sidebar con altura independiente */}
+            <div className="hidden h-full shrink-0 md:block">
                 <Sidebar items={items} />
-            </aside>
+            </div>
 
-            <div className="flex flex-1 flex-col">
-                <header className="flex items-center justify-between border-b px-6 py-3">
-                    <div className="text-sm">
-                        <span className="font-medium">{session.user.name}</span>
-                        <span className="text-muted-foreground">
-                            {" "}
-                            · {ETIQUETA_ROL[session.user.rol]}
-                        </span>
-                    </div>
-                    <form
-                        action={async () => {
-                            "use server";
-                            await signOut({ redirectTo: "/login" });
-                        }}
-                    >
-                        <Button type="submit" variant="outline" size="sm">
-                            Cerrar sesión
-                        </Button>
-                    </form>
-                </header>
+            {/* Área principal */}
+            <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+                {/* Topbar fijo dentro del layout */}
+                <div className="z-10 shrink-0">
+                    <Topbar
+                        nombre={nombreUsuario}
+                        rol={session.user.rol}
+                    />
+                </div>
 
-                <main className="flex-1 p-6">{children}</main>
+                {/* Scroll exclusivo del contenido */}
+                <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 lg:p-8">
+                    {children}
+                </main>
             </div>
         </div>
     );
