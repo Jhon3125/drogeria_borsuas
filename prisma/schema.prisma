@@ -73,20 +73,21 @@ enum Moneda {
 // ==========================================
 
 model Usuario {
-  id             Int           @id @default(autoincrement())
-  email          String        @unique
-  passwordHash   String
-  nombre         String
-  rol            RolUsuario
-  estado         EstadoUsuario @default(ACTIVO)
-  intentosFallidos Int         @default(0)
-  creadoEn       DateTime      @default(now())
-  actualizadoEn  DateTime      @updatedAt
+  id               Int           @id @default(autoincrement())
+  email            String        @unique
+  passwordHash     String
+  nombre           String
+  rol              RolUsuario
+  estado           EstadoUsuario @default(ACTIVO)
+  intentosFallidos Int           @default(0)
+  creadoEn         DateTime      @default(now())
+  actualizadoEn    DateTime      @updatedAt
 
   // Relaciones
-  ventas         Venta[]       @relation("Vendedor")
-  hojasDeRuta    HojaRuta[]    @relation("Conductor")
-  gastos         Gasto[]       @relation("ResponsableGasto")
+  ventas                Venta[]                @relation("Vendedor")
+  hojasDeRuta           HojaRuta[]             @relation("Conductor")
+  gastos                Gasto[]                @relation("ResponsableGasto")
+  movimientosInventario MovimientoInventario[] @relation("ResponsableMovimiento")
 }
 
 // ==========================================
@@ -101,20 +102,21 @@ model Categoria {
 }
 
 model Producto {
-  id             Int       @id @default(autoincrement())
-  codigo         String    @unique
-  nombre         String
-  descripcion    String?
-  precioCompra   Decimal   @default(0) @db.Decimal(12, 2)
-  precioVenta    Decimal   @default(0) @db.Decimal(12, 2)
-  moneda         Moneda    @default(PEN)
-  unidadMedida   String
-  stockMinimo    Int       @default(0)
-  estado         Boolean   @default(true)
-  categoriaId    Int
+  id           Int     @id @default(autoincrement())
+  codigo       String  @unique
+  nombre       String
+  descripcion  String?
+  precioCompra Decimal @default(0) @db.Decimal(12, 2)
+  precioVenta  Decimal @default(0) @db.Decimal(12, 2)
+  moneda       Moneda  @default(PEN)
+  unidadMedida String
+  stockMinimo  Int     @default(0)
+  stockActual  Int     @default(0)
+  estado       Boolean @default(true)
+  categoriaId  Int
 
   // Relaciones
-  categoria      Categoria @relation(fields: [categoriaId], references: [id])
+  categoria      Categoria              @relation(fields: [categoriaId], references: [id])
   lotes          Lote[]
   movimientos    MovimientoInventario[]
   detallesCompra DetalleCompra[]
@@ -126,27 +128,27 @@ model Producto {
 // ==========================================
 
 model Proveedor {
-  id           Int       @id @default(autoincrement())
-  razonSocial  String
-  ruc          String    @unique
-  contacto     String?
-  telefono     String?
-  correo       String?
-  direccion    String?
-  estado       Boolean   @default(true)
-  
-  compras      Compra[]
+  id          Int     @id @default(autoincrement())
+  razonSocial String
+  ruc         String  @unique
+  contacto    String?
+  telefono    String?
+  correo      String?
+  direccion   String?
+  estado      Boolean @default(true)
+
+  compras Compra[]
 }
 
 model Compra {
-  id           Int             @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   proveedorId  Int
-  fecha        DateTime        @default(now())
-  importeTotal Decimal @db.Decimal(12, 2)
-  estado       String          @default("COMPLETADO")
-  
-  proveedor    Proveedor       @relation(fields: [proveedorId], references: [id])
-  detalles     DetalleCompra[]
+  fecha        DateTime @default(now())
+  importeTotal Decimal  @db.Decimal(12, 2)
+  estado       String   @default("COMPLETADO")
+
+  proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
+  detalles  DetalleCompra[]
 }
 
 model DetalleCompra {
@@ -157,9 +159,9 @@ model DetalleCompra {
   precioUnitario   Decimal  @db.Decimal(12, 2)
   numeroLote       String
   fechaVencimiento DateTime
-  
-  compra           Compra   @relation(fields: [compraId], references: [id])
-  producto         Producto @relation(fields: [productoId], references: [id])
+
+  compra   Compra   @relation(fields: [compraId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
 }
 
 model Lote {
@@ -170,24 +172,29 @@ model Lote {
   cantidadDisponible Int
   fechaIngreso       DateTime @default(now())
   fechaVencimiento   DateTime
-  
-  producto           Producto @relation(fields: [productoId], references: [id])
-  movimientos        MovimientoInventario[]
+
+  producto    Producto               @relation(fields: [productoId], references: [id])
+  movimientos MovimientoInventario[]
 
   @@unique([numeroLote, productoId])
 }
 
 model MovimientoInventario {
-  id          Int            @id @default(autoincrement())
-  productoId  Int
-  loteId      Int?
-  tipo        TipoMovimiento
-  cantidad    Int
-  fecha       DateTime       @default(now())
-  motivo      String?
-  
-  producto    Producto       @relation(fields: [productoId], references: [id])
-  lote        Lote?          @relation(fields: [loteId], references: [id])
+  id         Int            @id @default(autoincrement())
+  productoId Int
+  loteId     Int?
+  usuarioId  Int?
+  tipo       TipoMovimiento
+  cantidad   Int
+  fecha      DateTime       @default(now())
+  motivo     String?
+
+  producto Producto @relation(fields: [productoId], references: [id])
+  lote     Lote?    @relation(fields: [loteId], references: [id])
+  usuario  Usuario? @relation("ResponsableMovimiento", fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId])
+  @@index([fecha])
 }
 
 // ==========================================
@@ -195,56 +202,56 @@ model MovimientoInventario {
 // ==========================================
 
 model Cliente {
-  id             Int       @id @default(autoincrement())
-  razonSocial    String
-  documento      String    @unique // DNI o RUC
-  telefono       String?
-  correo         String?
-  direccion      String?
-  estado         Boolean   @default(true)
-  
-  ventas         Venta[]
+  id          Int     @id @default(autoincrement())
+  razonSocial String
+  documento   String  @unique // DNI o RUC
+  telefono    String?
+  correo      String?
+  direccion   String?
+  estado      Boolean @default(true)
+
+  ventas Venta[]
 }
 
 model Venta {
-  id             Int          @id @default(autoincrement())
+  id             Int         @id @default(autoincrement())
   clienteId      Int
   vendedorId     Int
-  fecha          DateTime     @default(now())
-  subtotal       Decimal      @default(0) @db.Decimal(12, 2)
-  descuento      Decimal      @default(0) @db.Decimal(12, 2)
-  importeTotal   Decimal      @db.Decimal(12, 2)
-  etapa          EtapaVenta   @default(PROSPECTO) // Define si es Cotización o Venta firme
+  fecha          DateTime    @default(now())
+  subtotal       Decimal     @default(0) @db.Decimal(12, 2)
+  descuento      Decimal     @default(0) @db.Decimal(12, 2)
+  importeTotal   Decimal     @db.Decimal(12, 2)
+  etapa          EtapaVenta  @default(PROSPECTO) // Define si es Cotización o Venta firme
   metodoPago     MetodoPago?
-  saldoPendiente Decimal      @default(0) @db.Decimal(12, 2)
-  
-  cliente        Cliente      @relation(fields: [clienteId], references: [id])
-  vendedor       Usuario      @relation("Vendedor", fields: [vendedorId], references: [id])
-  detalles       DetalleVenta[]
-  pagos          Pago[]
-  despachos      Despacho[]
+  saldoPendiente Decimal     @default(0) @db.Decimal(12, 2)
+
+  cliente   Cliente        @relation(fields: [clienteId], references: [id])
+  vendedor  Usuario        @relation("Vendedor", fields: [vendedorId], references: [id])
+  detalles  DetalleVenta[]
+  pagos     Pago[]
+  despachos Despacho[]
 }
 
 model DetalleVenta {
-  id             Int      @id @default(autoincrement())
+  id             Int     @id @default(autoincrement())
   ventaId        Int
   productoId     Int
   cantidad       Int
-  precioUnitario Decimal  @db.Decimal(12, 2)
-  descuento      Decimal  @default(0) @db.Decimal(12, 2)
-  
-  venta          Venta    @relation(fields: [ventaId], references: [id])
-  producto       Producto @relation(fields: [productoId], references: [id])
+  precioUnitario Decimal @db.Decimal(12, 2)
+  descuento      Decimal @default(0) @db.Decimal(12, 2)
+
+  venta    Venta    @relation(fields: [ventaId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
 }
 
 model Pago {
-  id          Int        @id @default(autoincrement())
-  ventaId     Int
-  monto       Decimal    @db.Decimal(12, 2)
-  fecha       DateTime   @default(now())
-  metodoPago  MetodoPago
-  
-  venta       Venta      @relation(fields: [ventaId], references: [id])
+  id         Int        @id @default(autoincrement())
+  ventaId    Int
+  monto      Decimal    @db.Decimal(12, 2)
+  fecha      DateTime   @default(now())
+  metodoPago MetodoPago
+
+  venta Venta @relation(fields: [ventaId], references: [id])
 }
 
 // ==========================================
@@ -252,15 +259,15 @@ model Pago {
 // ==========================================
 
 model Gasto {
-  id             Int        @id @default(autoincrement())
-  tipoGasto      String
-  descripcion    String?
-  monto          Decimal    @db.Decimal(12, 2)
-  fecha          DateTime   @default(now())
-  responsableId  Int
-  medioPago      MetodoPago
-  
-  responsable    Usuario    @relation("ResponsableGasto", fields: [responsableId], references: [id])
+  id            Int        @id @default(autoincrement())
+  tipoGasto     String
+  descripcion   String?
+  monto         Decimal    @db.Decimal(12, 2)
+  fecha         DateTime   @default(now())
+  responsableId Int
+  medioPago     MetodoPago
+
+  responsable Usuario @relation("ResponsableGasto", fields: [responsableId], references: [id])
 }
 
 // ==========================================
@@ -268,35 +275,35 @@ model Gasto {
 // ==========================================
 
 model Vehiculo {
-  id          Int          @id @default(autoincrement())
-  placa       String       @unique
-  modelo      String
-  capacidad   String
-  estado      Boolean      @default(true)
-  
+  id        Int     @id @default(autoincrement())
+  placa     String  @unique
+  modelo    String
+  capacidad String
+  estado    Boolean @default(true)
+
   hojasDeRuta HojaRuta[]
 }
 
 model HojaRuta {
-  id          Int          @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   conductorId Int
   vehiculoId  Int
-  fecha       DateTime     @default(now())
-  estado      String       @default("ASIGNADO")
-  
-  conductor   Usuario      @relation("Conductor", fields: [conductorId], references: [id])
-  vehiculo    Vehiculo     @relation(fields: [vehiculoId], references: [id])
-  despachos   Despacho[]
+  fecha       DateTime @default(now())
+  estado      String   @default("ASIGNADO")
+
+  conductor Usuario    @relation("Conductor", fields: [conductorId], references: [id])
+  vehiculo  Vehiculo   @relation(fields: [vehiculoId], references: [id])
+  despachos Despacho[]
 }
 
 model Despacho {
-  id             Int            @id @default(autoincrement())
-  hojaRutaId     Int
-  ventaId        Int            @unique
-  estado         EstadoDespacho @default(PENDIENTE)
-  observacion    String?
-  fechaActualizacion DateTime   @updatedAt
-  
-  hojaRuta       HojaRuta       @relation(fields: [hojaRutaId], references: [id])
-  venta          Venta          @relation(fields: [ventaId], references: [id])
+  id                 Int            @id @default(autoincrement())
+  hojaRutaId         Int
+  ventaId            Int            @unique
+  estado             EstadoDespacho @default(PENDIENTE)
+  observacion        String?
+  fechaActualizacion DateTime       @updatedAt
+
+  hojaRuta HojaRuta @relation(fields: [hojaRutaId], references: [id])
+  venta    Venta    @relation(fields: [ventaId], references: [id])
 }
