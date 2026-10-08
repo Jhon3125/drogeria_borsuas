@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import type { RolUsuario } from "@/generated/prisma/enums";
 
 export const authConfig = {
     pages: { signIn: "/login" },
@@ -24,8 +25,8 @@ export const authConfig = {
             return token;
         },
         session({ session, token }) {
-            session.user.id = token.id;
-            session.user.rol = token.rol;
+            session.user.id = token.id as string;
+            session.user.rol = token.rol as RolUsuario;
             return session;
         },
     },
