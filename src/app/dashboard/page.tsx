@@ -1,26 +1,14 @@
-import { auth, signOut } from "@/auth";
-import { Button } from "@/components/ui/button";
+import { auth } from "@/auth";
 
 export default async function DashboardPage() {
     const session = await auth();
 
     return (
-        <main className="p-8 space-y-4">
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p>
-                Bienvenido, <strong>{session?.user.name}</strong> — Rol:{" "}
-                <strong>{session?.user.rol}</strong>
+        <div className="space-y-2">
+            <h1 className="text-2xl font-bold">Bienvenido, {session?.user.name}</h1>
+            <p className="text-muted-foreground">
+                Selecciona un módulo del menú lateral para comenzar.
             </p>
-            <form
-                action={async () => {
-                    "use server";
-                    await signOut({ redirectTo: "/login" });
-                }}
-            >
-                <Button type="submit" variant="outline">
-                    Cerrar sesión
-                </Button>
-            </form>
-        </main>
+        </div>
     );
 }
