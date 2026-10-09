@@ -21,8 +21,8 @@ export const productoSchema = z.object({
         .optional()
         .nullable(),
     categoriaId: z.coerce.number().min(1, "Debes seleccionar una categoría"),
-    unidadMedida: z.enum(UNIDADES_MEDIDA).catch("Unidad"),
-    moneda: z.enum(["PEN", "USD"]).catch("PEN"),
+    unidadMedida: z.enum(UNIDADES_MEDIDA, { error: "Selecciona una unidad de medida válida" }),
+    moneda: z.enum(["PEN", "USD"], { error: "Selecciona una moneda válida" }),
     precioCompra: z.string()
         .regex(dineroRegEx, "Debe ser un número válido (ej. 15.50)")
         .refine((val) => Number(val) >= 0, "No puede ser negativo")

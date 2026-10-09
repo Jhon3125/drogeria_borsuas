@@ -9,12 +9,9 @@ import {
     PackageX,
 } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
 import { exigirRol } from "@/lib/guard";
-import {
-    ROLES_AJUSTE_INVENTARIO,
-    ROLES_CONSULTA_INVENTARIO,
-} from "@/lib/permisos";
+import { ROLES_CONSULTA_INVENTARIO } from "@/lib/permisos";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import {
@@ -26,7 +23,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-import { AjusteDialog } from "./ajuste-dialog";
+
 import { FiltrosInventario } from "./filtros";
 
 type EstadoStock = "disponible" | "bajo" | "agotado";
@@ -45,11 +42,8 @@ export default async function InventarioPage({
         estado?: string;
     }>;
 }) {
-    const usuario = await exigirRol(ROLES_CONSULTA_INVENTARIO);
+    await exigirRol(ROLES_CONSULTA_INVENTARIO);
 
-    const puedeAjustar = ROLES_AJUSTE_INVENTARIO.includes(
-        usuario.rol
-    );
 
     const filtros = await searchParams;
     const q = (filtros.q ?? "").trim();
@@ -59,60 +53,24 @@ export default async function InventarioPage({
         ? (filtros.estado ?? "todos")
         : "todos";
 
-    // Se consultan todos los productos para calcular correctamente
-    // las métricas y filtros en este primer incremento.
-    const productos = await prisma.producto.findMany({
-        select: {
-            id: true,
-            codigo: true,
-            nombre: true,
-            estado: true,
-            stockActual: true,
-            stockMinimo: true,
-            categoria: {
-                select: { nombre: true },
-            },
-        },
-        orderBy: { nombre: "asc" },
-    });
-
+    // Solo productos con al menos un lote respaldado por una compra RECIBIDO.
+    // stockActual se conserva para conciliación, NO como cifra operativa.
+    const productos = await consultarInventarioRespaldado();
     const activos = productos.filter((p) => p.estado);
-
-    const productosConStock = activos.filter(
-        (p) => p.stockActual > 0
+    const productosConStock = activos.filter((p) => p.stockLotes > 0).length;
+    const stockBajo = activos.filter((p) =>
+        obtenerEstado(p.stockLotes, p.stockMinimo) === "bajo"
     ).length;
-
-    const stockBajo = activos.filter(
-        (p) => obtenerEstado(p.stockActual, p.stockMinimo) === "bajo"
+    const agotados = activos.filter((p) =>
+        obtenerEstado(p.stockLotes, p.stockMinimo) === "agotado"
     ).length;
-
-    const agotados = activos.filter(
-        (p) => obtenerEstado(p.stockActual, p.stockMinimo) === "agotado"
-    ).length;
-
-    const unidadesTotales = activos.reduce(
-        (total, p) => total + p.stockActual,
-        0
-    );
-
+    const unidadesTotales = activos.reduce((suma, p) => suma + p.stockLotes, 0);
     const filtrados = productos.filter((p) => {
-        const coincideBusqueda =
-            p.nombre.toLowerCase().includes(q.toLowerCase()) ||
+        const coincideBusqueda = p.nombre.toLowerCase().includes(q.toLowerCase()) ||
             p.codigo.toLowerCase().includes(q.toLowerCase());
-
-        const coincideEstado =
-            estado === "todos" ||
-            obtenerEstado(p.stockActual, p.stockMinimo) === estado;
-
-        return coincideBusqueda && coincideEstado;
+        return coincideBusqueda && (estado === "todos" ||
+            obtenerEstado(p.stockLotes, p.stockMinimo) === estado);
     });
-
-    const opcionesAjuste = activos.map((p) => ({
-        id: p.id,
-        codigo: p.codigo,
-        nombre: p.nombre,
-        stockActual: p.stockActual,
-    }));
 
     return (
         <div className="mx-auto max-w-7xl space-y-7 pb-6">
@@ -131,14 +89,11 @@ export default async function InventarioPage({
                             Inventario y Stock
                         </h1>
                         <p className="mt-1.5 text-sm text-muted-foreground">
-                            Consulta existencias y registra movimientos
-                            manuales del almacén.
+                            Existencias respaldadas por compras recibidas y lotes identificados.
                         </p>
                     </div>
 
-                    {puedeAjustar && (
-                        <AjusteDialog productos={opcionesAjuste} />
-                    )}
+
                 </div>
             </section>
 
@@ -146,7 +101,7 @@ export default async function InventarioPage({
                 <MetricCard
                     titulo="Unidades disponibles"
                     valor={unidadesTotales}
-                    descripcion="Total de unidades de productos activos"
+                    descripcion="Unidades en lotes vinculados a compras recibidas"
                     icono={Boxes}
                     color="blue"
                 />
@@ -184,10 +139,13 @@ export default async function InventarioPage({
                                 </h2>
                             </div>
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Stock actual y mínimo configurado.
+                                Existencias por lote y compra recibida. Los registros sin respaldo se consultan en Conciliación.
                             </p>
                         </div>
 
+                        <Link href="/dashboard/inventario/conciliacion" className="text-sm font-medium text-primary hover:underline">
+                            Conciliar stock y lotes
+                        </Link>
                         <Link
                             href="/dashboard/inventario/movimientos"
                             className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
@@ -211,24 +169,20 @@ export default async function InventarioPage({
                                 <TableHead className="pl-6">Producto</TableHead>
                                 <TableHead>Categoría</TableHead>
                                 <TableHead className="text-center">
-                                    Stock actual
+                                    Stock en lotes
                                 </TableHead>
                                 <TableHead className="text-center">
                                     Mínimo
                                 </TableHead>
                                 <TableHead>Estado</TableHead>
-                                {puedeAjustar && (
-                                    <TableHead className="pr-6 text-right">
-                                        Acciones
-                                    </TableHead>
-                                )}
+                                <TableHead className="pr-6 text-right">Lotes</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filtrados.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={puedeAjustar ? 6 : 5}
+                                        colSpan={6}
                                         className="h-40 text-center text-sm text-muted-foreground"
                                     >
                                         No se encontraron productos con esos criterios.
@@ -237,7 +191,7 @@ export default async function InventarioPage({
                             ) : (
                                 filtrados.map((p) => {
                                     const estadoStock = obtenerEstado(
-                                        p.stockActual,
+                                        p.stockLotes,
                                         p.stockMinimo
                                     );
 
@@ -266,7 +220,7 @@ export default async function InventarioPage({
                                                 {p.categoria.nombre}
                                             </TableCell>
                                             <TableCell className="text-center font-semibold text-primary">
-                                                {p.stockActual}
+                                                {p.stockLotes}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {p.stockMinimo}
@@ -280,20 +234,7 @@ export default async function InventarioPage({
                                                             : "Disponible"}
                                                 </span>
                                             </TableCell>
-                                            {puedeAjustar && (
-                                                <TableCell className="pr-6 text-right">
-                                                    {p.estado ? (
-                                                        <AjusteDialog
-                                                            productos={opcionesAjuste}
-                                                            productoId={p.id}
-                                                        />
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            No disponible
-                                                        </span>
-                                                    )}
-                                                </TableCell>
-                                            )}
+                                            <TableCell className="pr-6 text-right"><Link className="text-sm font-medium text-primary hover:underline" href={`/dashboard/inventario/producto/${p.id}`}>Ver lotes</Link></TableCell>
                                         </TableRow>
                                     );
                                 })
