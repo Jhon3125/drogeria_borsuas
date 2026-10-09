@@ -5,12 +5,14 @@ import {
     AlertTriangle,
     ArrowRight,
     Boxes,
+    Building2,
     CheckCircle2,
     ClipboardList,
     CreditCard,
     FileText,
     LayoutDashboard,
     Package,
+    PackageSearch,
     ShieldCheck,
     ShoppingCart,
     Tags,
@@ -37,6 +39,9 @@ const ICONOS: Record<IconoNav, LucideIcon> = {
     package: Package,
     tags: Tags,
     boxes: Boxes,
+    building: Building2,
+    "shopping-cart": ShoppingCart,
+    "package-search": PackageSearch,
 };
 
 const DESCRIPCIONES: Record<string, string> = {

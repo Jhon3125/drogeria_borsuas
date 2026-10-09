@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { productoSchema } from "@/lib/validaciones/producto";
@@ -49,8 +50,8 @@ export async function crearProducto(
                 categoriaId: parsed.data.categoriaId,
                 unidadMedida: parsed.data.unidadMedida,
                 moneda: parsed.data.moneda,
-                precioCompra: parsed.data.precioCompra, // Prisma convierte este string a Decimal automáticamente
-                precioVenta: parsed.data.precioVenta,
+                precioCompra: new Prisma.Decimal(parsed.data.precioCompra),
+                precioVenta: new Prisma.Decimal(parsed.data.precioVenta),
                 stockMinimo: parsed.data.stockMinimo,
                 estado: true, // Siempre activo al crear
             },
@@ -96,8 +97,8 @@ export async function actualizarProducto(
                 categoriaId: parsed.data.categoriaId,
                 unidadMedida: parsed.data.unidadMedida,
                 moneda: parsed.data.moneda,
-                precioCompra: parsed.data.precioCompra,
-                precioVenta: parsed.data.precioVenta,
+                precioCompra: new Prisma.Decimal(parsed.data.precioCompra),
+                precioVenta: new Prisma.Decimal(parsed.data.precioVenta),
                 stockMinimo: parsed.data.stockMinimo,
             },
         });
