@@ -87,6 +87,7 @@ model Usuario {
   ventas                Venta[]                @relation("Vendedor")
   hojasDeRuta           HojaRuta[]             @relation("Conductor")
   gastos                Gasto[]                @relation("ResponsableGasto")
+  recepcionesCompra RecepcionCompra[] @relation("ResponsableRecepcion")
   movimientosInventario MovimientoInventario[] @relation("ResponsableMovimiento")
 }
 
@@ -149,6 +150,7 @@ model Compra {
 
   proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
   detalles  DetalleCompra[]
+  recepciones RecepcionCompra[]
 }
 
 model DetalleCompra {
@@ -162,6 +164,7 @@ model DetalleCompra {
 
   compra   Compra   @relation(fields: [compraId], references: [id])
   producto Producto @relation(fields: [productoId], references: [id])
+  recepciones RecepcionCompra[]
 }
 
 model Lote {
@@ -175,8 +178,31 @@ model Lote {
 
   producto    Producto               @relation(fields: [productoId], references: [id])
   movimientos MovimientoInventario[]
+  recepciones RecepcionCompra[]
 
   @@unique([numeroLote, productoId])
+}
+
+/// Registra una cantidad recibida realmente, incluso en entregas parciales.
+/// Una compra antigua RECIBIDO no se migra a recepción ficticia.
+model RecepcionCompra {
+  id Int @id @default(autoincrement())
+  compraId Int
+  detalleCompraId Int
+  loteId Int
+  usuarioId Int?
+  cantidad Int
+  fecha DateTime @default(now())
+
+  compra Compra @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  detalleCompra DetalleCompra @relation(fields: [detalleCompraId], references: [id], onDelete: Restrict)
+  lote Lote @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  usuario Usuario? @relation("ResponsableRecepcion", fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([compraId])
+  @@index([detalleCompraId])
+  @@index([loteId])
+  @@index([usuarioId])
 }
 
 model MovimientoInventario {
