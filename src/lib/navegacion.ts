@@ -5,7 +5,10 @@ export type IconoNav =
     | "users"
     | "package"
     | "tags"
-    | "boxes";
+    | "boxes"
+    | "building"
+    | "shopping-cart"
+    | "package-search";
 
 export type GrupoNav = "principal" | "administracion";
 
@@ -55,6 +58,9 @@ export const NAVEGACION: ItemNav[] = [
         icono: "boxes",
         grupo: "principal",
     },
+    { titulo: "Proveedores", href: "/dashboard/proveedores", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "building", grupo: "principal" },
+    { titulo: "Compras", href: "/dashboard/compras", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "shopping-cart", grupo: "principal" },
+    { titulo: "Lotes y vencimientos", href: "/dashboard/lotes", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "package-search", grupo: "principal" },
     {
         titulo: "Usuarios",
         href: "/dashboard/usuarios",
@@ -134,26 +140,6 @@ const LOGISTICA: RolUsuario[] = [
 ];
 
 export const NAVEGACION_FUTURA: ItemNavFuturo[] = [
-    // Compras y abastecimiento
-    {
-        titulo: "Proveedores",
-        roles: ABASTECIMIENTO,
-        grupo: "compras",
-        icono: "building",
-    },
-    {
-        titulo: "Compras",
-        roles: ABASTECIMIENTO,
-        grupo: "compras",
-        icono: "shopping-cart",
-    },
-    {
-        titulo: "Lotes y vencimientos",
-        roles: ABASTECIMIENTO,
-        grupo: "compras",
-        icono: "package-search",
-    },
-
     // Comercial y ventas
     {
         titulo: "Clientes",

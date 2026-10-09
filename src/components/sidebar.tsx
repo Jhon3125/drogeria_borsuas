@@ -61,6 +61,9 @@ const ICONOS: Record<IconoNav, IconoComponente> = {
     package: Package,
     tags: Tags,
     boxes: Boxes,
+    building: Building2,
+    "shopping-cart": ShoppingCart,
+    "package-search": PackageSearch,
 };
 
 const ICONOS_FUTUROS: Record<
