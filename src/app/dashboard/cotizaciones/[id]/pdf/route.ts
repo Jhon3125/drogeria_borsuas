@@ -70,9 +70,10 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     },
   });
   if (!venta) return new NextResponse("Cotización no encontrada", { status: 404 });
+  const numeroCotizacion = `COT-${String(venta.id).padStart(5, "0")}`;
 
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`Cotización COT-${String(venta.id).padStart(5, "0")}`);
+  pdf.setTitle(`Cotización ${numeroCotizacion}`);
   pdf.setAuthor("Droguería Borsuas E.I.R.L.");
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -90,7 +91,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     p.drawRectangle({ x: 0, y: HEIGHT - 102, width: WIDTH, height: 102, color: BLUE });
     text(p, "DROGUERÍA BORSUAS E.I.R.L.", MARGIN, HEIGHT - 51, bold, 18, rgb(1, 1, 1));
     text(p, continuation ? "COTIZACIÓN COMERCIAL · CONTINUACIÓN" : "COTIZACIÓN COMERCIAL", MARGIN, HEIGHT - 73, regular, 10, rgb(0.87, 0.94, 1));
-    right(p, `COT-${String(venta.id).padStart(5, "0")}`, WIDTH - MARGIN, HEIGHT - 73, bold, 11, rgb(1, 1, 1));
+    right(p, numeroCotizacion, WIDTH - MARGIN, HEIGHT - 73, bold, 11, rgb(1, 1, 1));
   }
   function newPage() {
     footer(page, pageNum);
@@ -166,7 +167,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="COT-${String(venta.id).padStart(5, "0")}.pdf"`,
+      "Content-Disposition": `attachment; filename="${numeroCotizacion}.pdf"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
