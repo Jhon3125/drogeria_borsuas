@@ -5,7 +5,7 @@ export async function consultarInventarioRespaldado() {
   const productos = await prisma.producto.findMany({
     select: {
       id: true, codigo: true, nombre: true, estado: true,
-      stockActual: true, stockMinimo: true,
+      stockActual: true, stockMinimo: true, categoriaId: true,
       categoria: {select: {nombre: true}},
       lotes: {select: {
         id: true, numeroLote: true, fechaVencimiento: true,

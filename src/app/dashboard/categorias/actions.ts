@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ROLES_GESTION_CATALOGO } from "@/lib/permisos";
@@ -59,9 +60,14 @@ export async function crearCategoria(
         };
     }
 
-    await prisma.categoria.create({
-        data: { nombre, descripcion: descripcion || null },
-    });
+    try {
+        await prisma.categoria.create({ data: { nombre, descripcion: descripcion || null } });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+            return { errores: { nombre: "Ya existe una categoría con ese nombre" }, valores: { nombre, descripcion } };
+        }
+        return { error: "No se pudo crear la categoría. Intenta nuevamente." };
+    }
 
     revalidatePath("/dashboard/categorias");
     return { ok: true };
@@ -92,10 +98,14 @@ export async function actualizarCategoria(
         };
     }
 
-    await prisma.categoria.update({
-        where: { id },
-        data: { nombre, descripcion: descripcion || null },
-    });
+    try {
+        await prisma.categoria.update({ where: { id }, data: { nombre, descripcion: descripcion || null } });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+            return { errores: { nombre: "Ya existe una categoría con ese nombre" }, valores: { nombre, descripcion } };
+        }
+        return { error: "No se pudo actualizar la categoría." };
+    }
 
     revalidatePath("/dashboard/categorias");
     return { ok: true };

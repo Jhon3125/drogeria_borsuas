@@ -6,7 +6,12 @@ import { exigirRol } from "@/lib/guard";
 import { ROLES_COMPRAS_GESTION, ROLES_RECEPCION } from "@/lib/compras-roles";
 import { Prisma } from "@/generated/prisma/client";
 const itemSchema=z.object({productoId:z.number().int().positive(),cantidad:z.number().int().positive().max(1000000),precioUnitario:z.string().regex(/^\d{1,9}(\.\d{1,2})?$/),numeroLote:z.string().trim().min(1).max(90),fechaVencimiento:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)});
-const schema=z.object({proveedorId:z.number().int().positive(),items:z.array(itemSchema).min(1).max(100)});
+const schema = z.object({
+  proveedorId: z.number().int().positive(),
+  moneda: z.enum(["PEN", "USD"]),
+  tipoCambio: z.string().regex(/^(?:|\d{1,5}(?:\.\d{1,6})?)$/, "Tipo de cambio inválido").default(""),
+  items: z.array(itemSchema).min(1).max(100),
+});
 export type EstadoCompra={ok?:string;error?:string}|undefined;
 function dateUTC(s:string){const date=new Date(`${s}T12:00:00.000Z`);if(Number.isNaN(date.getTime())||date.toISOString().slice(0,10)!==s)throw new Error("Fecha de vencimiento inválida");return date;}
 export async function crearCompra(_prev:EstadoCompra,form:FormData):Promise<EstadoCompra>{
@@ -15,16 +20,37 @@ export async function crearCompra(_prev:EstadoCompra,form:FormData):Promise<Esta
  try{payload=JSON.parse(String(form.get("payload")??""));}catch{return {error:"Solicitud inválida"};}
  const parsed=schema.safeParse(payload);
  if(!parsed.success)return {error:parsed.error.issues[0]?.message??"Compra inválida"};
- const {proveedorId,items}=parsed.data;
+ const {proveedorId,moneda,tipoCambio,items}=parsed.data;
  if(new Set(items.map(i=>`${i.productoId}::${i.numeroLote.trim()}`)).size!==items.length)return {error:"No repitas producto y lote dentro de la misma compra"};
  try{
   const total=items.reduce((acc,i)=>acc.plus(new Prisma.Decimal(i.precioUnitario).mul(i.cantidad)),new Prisma.Decimal(0));
   await prisma.$transaction(async tx=>{
    const proveedor=await tx.proveedor.findFirst({where:{id:proveedorId,estado:true}});
    if(!proveedor)throw new Error("Selecciona un proveedor activo");
-   const productos=await tx.producto.findMany({where:{id:{in:items.map(i=>i.productoId)},estado:true},select:{id:true}});
-   if(new Set(productos.map(p=>p.id)).size!==new Set(items.map(i=>i.productoId)).size)throw new Error("Hay productos inexistentes o inactivos");
-   const compra=await tx.compra.create({data:{proveedorId,importeTotal:total,estado:"PENDIENTE"}});
+   const productos = await tx.producto.findMany({
+     where: {id: {in: items.map(i => i.productoId)}, estado: true},
+     select: {id: true, moneda: true},
+   });
+   if (new Set(productos.map(p => p.id)).size !== new Set(items.map(i => i.productoId)).size) {
+     throw new Error("Hay productos inexistentes o inactivos");
+   }
+
+   // Si una compra usa una moneda diferente de la de algún producto,
+   // se exige un tipo de cambio explícito. Nunca se combinan importes a ciegas.
+   const requiereCambio = productos.some(p => p.moneda !== moneda);
+   const cambio = tipoCambio ? new Prisma.Decimal(tipoCambio) : null;
+   if (requiereCambio && (!cambio || !cambio.isFinite() || cambio.lte(0))) {
+     throw new Error("Indica un tipo de cambio positivo (soles por dólar) para esta compra");
+   }
+   const compra = await tx.compra.create({
+     data: {
+       proveedorId,
+       importeTotal: total, // todos los precios enviados están en moneda de la compra
+       moneda,
+       tipoCambio: requiereCambio ? cambio : null,
+       estado: "PENDIENTE",
+     },
+   });
    await tx.detalleCompra.createMany({data:items.map(i=>({compraId:compra.id,productoId:i.productoId,cantidad:i.cantidad,precioUnitario:new Prisma.Decimal(i.precioUnitario),numeroLote:i.numeroLote.trim(),fechaVencimiento:dateUTC(i.fechaVencimiento)}))});
   });
  }catch(e){return {error:e instanceof Error?e.message:"No se pudo guardar la compra"};}

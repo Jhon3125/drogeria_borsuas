@@ -11,7 +11,7 @@ export async function iniciarSesion(
         await signIn("credentials", {
             email: formData.get("email"),
             password: formData.get("password"),
-            redirectTo: "/dashboard",
+            redirectTo: "/dashboard/inicio",
         });
     } catch (error) {
         if (error instanceof AuthError) {
