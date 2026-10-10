@@ -8,7 +8,9 @@ export type IconoNav =
     | "boxes"
     | "building"
     | "shopping-cart"
-    | "package-search";
+    | "package-search"
+    | "users-round"
+    | "file-text"; 
 
 export type GrupoNav = "principal" | "administracion";
 
@@ -61,6 +63,9 @@ export const NAVEGACION: ItemNav[] = [
     { titulo: "Proveedores", href: "/dashboard/proveedores", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "building", grupo: "principal" },
     { titulo: "Compras", href: "/dashboard/compras", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "shopping-cart", grupo: "principal" },
     { titulo: "Lotes y vencimientos", href: "/dashboard/lotes", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "package-search", grupo: "principal" },
+    { titulo: "Clientes", href: "/dashboard/clientes", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "users-round", grupo: "principal" },
+    { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "principal" },
+    { titulo: "Ventas y CRM", href: "/dashboard/ventas", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "shopping-cart", grupo: "principal" },
     {
         titulo: "Usuarios",
         href: "/dashboard/usuarios",
@@ -140,26 +145,6 @@ const LOGISTICA: RolUsuario[] = [
 ];
 
 export const NAVEGACION_FUTURA: ItemNavFuturo[] = [
-    // Comercial y ventas
-    {
-        titulo: "Clientes",
-        roles: COMERCIALES,
-        grupo: "comercial",
-        icono: "users-round",
-    },
-    {
-        titulo: "Cotizaciones",
-        roles: COMERCIALES,
-        grupo: "comercial",
-        icono: "file-text",
-    },
-    {
-        titulo: "Ventas y CRM",
-        roles: COMERCIALES,
-        grupo: "comercial",
-        icono: "shopping-cart",
-    },
-
     // Finanzas
     {
         titulo: "Caja y movimientos",
