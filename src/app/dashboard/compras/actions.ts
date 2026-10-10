@@ -30,27 +30,80 @@ export async function crearCompra(_prev:EstadoCompra,form:FormData):Promise<Esta
  }catch(e){return {error:e instanceof Error?e.message:"No se pudo guardar la compra"};}
  revalidatePath("/dashboard/compras");return {ok:"Compra registrada. Las existencias se actualizarán al confirmar la recepción."};
 }
-export async function recibirCompra(form:FormData){
- const responsable=await exigirRol(ROLES_RECEPCION);
- const usuarioId=Number(responsable.id);
- if(!Number.isSafeInteger(usuarioId)||usuarioId<=0)throw new Error("Responsable inválido");
- const compraId=Number(form.get("compraId"));
- if(!Number.isSafeInteger(compraId)||compraId<=0)throw new Error("Compra inválida");
- await prisma.$transaction(async tx=>{
-  // Actualización condicional impide recibir dos veces una misma compra.
-  const marcada=await tx.compra.updateMany({where:{id:compraId,estado:"PENDIENTE"},data:{estado:"RECIBIDO"}});
-  if(marcada.count!==1)throw new Error("La compra ya fue recibida o no está pendiente");
-  const detalles=await tx.detalleCompra.findMany({where:{compraId},orderBy:{id:"asc"}});
-  if(!detalles.length)throw new Error("La compra no tiene detalles");
-  for(const d of detalles){
-   const producto=await tx.producto.findFirst({where:{id:d.productoId,estado:true},select:{id:true}});
-   if(!producto)throw new Error("Producto inexistente o inactivo durante la recepción");
-   const previo=await tx.lote.findUnique({where:{numeroLote_productoId:{numeroLote:d.numeroLote,productoId:d.productoId}}});
-   if(previo && previo.fechaVencimiento.getTime()!==d.fechaVencimiento.getTime())throw new Error(`El lote ${d.numeroLote} ya existe con otro vencimiento`);
-   const lote=await tx.lote.upsert({where:{numeroLote_productoId:{numeroLote:d.numeroLote,productoId:d.productoId}},create:{numeroLote:d.numeroLote,productoId:d.productoId,cantidadInicial:d.cantidad,cantidadDisponible:d.cantidad,fechaVencimiento:d.fechaVencimiento},update:{cantidadInicial:{increment:d.cantidad},cantidadDisponible:{increment:d.cantidad}}});
-   await tx.producto.update({where:{id:d.productoId},data:{stockActual:{increment:d.cantidad}}});
-   await tx.movimientoInventario.create({data:{productoId:d.productoId,loteId:lote.id,usuarioId,tipo:"ENTRADA_COMPRA",cantidad:d.cantidad,motivo:`Recepción de compra #${compraId}`}});
-  }
- },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:15000});
- revalidatePath("/dashboard/compras");revalidatePath("/dashboard/lotes");revalidatePath("/dashboard/inventario");revalidatePath("/dashboard/inventario/movimientos");revalidatePath("/dashboard");
+/** Recibe cantidades reales por línea; operación atómica y serializable. */
+export async function recibirCompra(form: FormData) {
+ const responsable = await exigirRol(ROLES_RECEPCION);
+ const usuarioId = Number(responsable.id);
+ if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) throw new Error("Responsable inválido");
+ const compraId = Number(form.get("compraId"));
+ if (!Number.isSafeInteger(compraId) || compraId <= 0) throw new Error("Compra inválida");
+ let cantidades: Record<string, unknown>;
+ try {
+   cantidades = JSON.parse(String(form.get("cantidades") ?? ""));
+   if (!cantidades || typeof cantidades !== "object" || Array.isArray(cantidades)) throw Error();
+ } catch { throw new Error("Cantidades de recepción inválidas"); }
+ const entradas = Object.entries(cantidades);
+ if (entradas.length === 0 || entradas.length > 100) throw new Error("Indica al menos una línea a recibir");
+ for (const [id, cantidad] of entradas) {
+   if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) ||
+       typeof cantidad !== "number" || !Number.isSafeInteger(cantidad) || cantidad < 0) {
+     throw new Error("Las cantidades deben ser enteros no negativos");
+   }
+ }
+ if (!entradas.some(([, cantidad]) => Number(cantidad) > 0)) throw new Error("Debes recibir al menos una unidad");
+ await prisma.$transaction(async (tx) => {
+   const compra = await tx.compra.findUnique({where: {id: compraId}, include: {
+     detalles: {include: {recepciones: {select: {cantidad: true}}}}
+   }});
+   if (!compra || !["PENDIENTE", "PARCIAL"].includes(compra.estado)) {
+     throw new Error("La compra no admite nuevas recepciones");
+   }
+   const ids = new Set(compra.detalles.map(d => String(d.id)));
+   if (entradas.some(([id]) => !ids.has(id))) throw new Error("Detalle de compra no válido");
+   const restante = new Map<number, number>();
+   for (const detalle of compra.detalles) {
+     const recibidas = detalle.recepciones.reduce((total, r) => total + r.cantidad, 0);
+     const pendiente = detalle.cantidad - recibidas;
+     if (pendiente < 0) throw new Error("La compra contiene cantidades incoherentes");
+     const nueva = Number(cantidades[String(detalle.id)] ?? 0);
+     if (!Number.isSafeInteger(nueva) || nueva < 0 || nueva > pendiente) {
+       throw new Error(`Cantidad supera el pendiente del detalle #${detalle.id}`);
+     }
+     restante.set(detalle.id, pendiente - nueva);
+   }
+   // Bloqueo lógico de la compra. Serializable abortará la transacción si hay carreras.
+   const siguienteEstado = [...restante.values()].every(x => x === 0) ? "RECIBIDO" : "PARCIAL";
+   const cambio = await tx.compra.updateMany({
+     where: {id: compraId, estado: compra.estado}, data: {estado: siguienteEstado}
+   });
+   if (cambio.count !== 1) throw new Error("La compra cambió de estado; actualiza la pantalla");
+   for (const detalle of compra.detalles) {
+     const cantidad = Number(cantidades[String(detalle.id)] ?? 0);
+     if (cantidad === 0) continue;
+     const producto = await tx.producto.findFirst({where: {id: detalle.productoId, estado: true}, select: {id: true}});
+     if (!producto) throw new Error("Producto inactivo o inexistente");
+     const previo = await tx.lote.findUnique({where: {
+       numeroLote_productoId: {numeroLote: detalle.numeroLote, productoId: detalle.productoId}
+     }});
+     if (previo && previo.fechaVencimiento.getTime() !== detalle.fechaVencimiento.getTime()) {
+       throw new Error(`El lote ${detalle.numeroLote} tiene otro vencimiento`);
+     }
+     const lote = await tx.lote.upsert({
+       where: {numeroLote_productoId: {numeroLote: detalle.numeroLote, productoId: detalle.productoId}},
+       create: {numeroLote: detalle.numeroLote, productoId: detalle.productoId,
+         cantidadInicial: cantidad, cantidadDisponible: cantidad, fechaVencimiento: detalle.fechaVencimiento},
+       update: {cantidadInicial: {increment: cantidad}, cantidadDisponible: {increment: cantidad}}
+     });
+     await tx.recepcionCompra.create({data: {
+       compraId, detalleCompraId: detalle.id, loteId: lote.id, usuarioId, cantidad
+     }});
+     await tx.producto.update({where: {id: detalle.productoId}, data: {stockActual: {increment: cantidad}}});
+     await tx.movimientoInventario.create({data: {
+       productoId: detalle.productoId, loteId: lote.id, usuarioId,
+       tipo: "ENTRADA_COMPRA", cantidad,
+       motivo: `Recepción compra #${compraId}, detalle #${detalle.id}`
+     }});
+   }
+ }, {isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000});
+ for (const ruta of ["/dashboard/compras", "/dashboard/lotes", "/dashboard/inventario", "/dashboard/inventario/conciliacion", "/dashboard/inventario/movimientos", "/dashboard"]) revalidatePath(ruta);
 }

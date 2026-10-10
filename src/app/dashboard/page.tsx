@@ -42,6 +42,8 @@ const ICONOS: Record<IconoNav, LucideIcon> = {
     building: Building2,
     "shopping-cart": ShoppingCart,
     "package-search": PackageSearch,
+    "users-round": Users,
+    "file-text": FileText,
 };
 
 const DESCRIPCIONES: Record<string, string> = {
@@ -51,6 +53,9 @@ const DESCRIPCIONES: Record<string, string> = {
         "Organiza y clasifica los productos.",
     "/dashboard/inventario":
         "Accede a la gestión de existencias.",
+    "/dashboard/clientes": "Gestiona clientes y sus datos comerciales.",
+    "/dashboard/cotizaciones": "Crea cotizaciones sin afectar existencias.",
+    "/dashboard/ventas": "Consulta la evolución comercial de las oportunidades.",
     "/dashboard/usuarios":
         "Gestiona las cuentas, roles y accesos.",
 };
