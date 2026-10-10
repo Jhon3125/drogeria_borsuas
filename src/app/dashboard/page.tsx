@@ -1,6 +1,5 @@
 
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
     AlertTriangle,
     ArrowRight,
@@ -22,7 +21,7 @@ import {
     type LucideIcon,
 } from "lucide-react";
 
-import { auth } from "@/auth";
+import { usuarioVigente } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import {
     ETIQUETA_ROL,
@@ -163,14 +162,9 @@ function SeccionFutura({
 }
 
 export default async function DashboardPage() {
-    const session = await auth();
-
-    if (!session?.user) {
-        redirect("/login");
-    }
-
-    const rol: RolUsuario = session.user.rol;
-    const nombre = session.user.name ?? "Usuario";
+    const usuario = await usuarioVigente();
+    const rol: RolUsuario = usuario.rol;
+    const nombre = usuario.name;
 
     const esSuperAdmin = rol === "SUPER_ADMIN";
 
@@ -382,60 +376,22 @@ export default async function DashboardPage() {
                 )}
             </section>
 
-            {/* Inventario: reservado para Sprint 1 */}
+            {/* Inventario — módulo disponible del Sprint 1 */}
             {NAVEGACION.some(
-                (item) =>
-                    item.href === "/dashboard/inventario" &&
-                    item.roles.includes(rol)
+                (item) => item.href === "/dashboard/inventario" && item.roles.includes(rol)
             ) && (
-                    <section className="space-y-4">
-                        <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                <Boxes className="h-5 w-5" />
-                            </div>
-
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Inventario y stock
-                                </h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Indicadores que conectaremos durante
-                                    el desarrollo de Inventario.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                            <MetricCard
-                                titulo="Unidades disponibles"
-                                descripcion="Existencias disponibles en lotes"
-                                icono={Boxes}
-                                pendiente
-                            />
-
-                            <MetricCard
-                                titulo="Productos con stock bajo"
-                                descripcion="Existencias por debajo del mínimo"
-                                icono={AlertTriangle}
-                                pendiente
-                            />
-
-                            <MetricCard
-                                titulo="Productos agotados"
-                                descripcion="Sin unidades disponibles"
-                                icono={Package}
-                                pendiente
-                            />
-
-                            <MetricCard
-                                titulo="Próximos a vencer"
-                                descripcion="Lotes próximos a su vencimiento"
-                                icono={AlertTriangle}
-                                pendiente
-                            />
-                        </div>
-                    </section>
-                )}
+                <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold">Inventario y stock</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Consulta existencias por lotes recibidos, stock mínimo y conciliación.
+                        </p>
+                    </div>
+                    <Link href="/dashboard/inventario" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#123E70] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e3157]">
+                        Ver inventario <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </section>
+            )}
 
             {/* Ventas */}
             {puedeVerVentas && (

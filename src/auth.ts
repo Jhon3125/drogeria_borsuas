@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "./auth.config";
 
-const MAX_INTENTOS = 5;
+const MAX_INTENTOS = 3;
 
 class CuentaBloqueada extends CredentialsSignin {
     code = "bloqueado";
@@ -39,23 +39,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 const correcta = await bcrypt.compare(password, usuario.passwordHash);
 
                 if (!correcta) {
-                    const intentos = usuario.intentosFallidos + 1;
-                    await prisma.usuario.update({
-                        where: { id: usuario.id },
-                        data: {
-                            intentosFallidos: intentos,
-                            ...(intentos >= MAX_INTENTOS ? { estado: "BLOQUEADO" } : {}),
+                    // Incrementos condicionados y atómicos: dos intentos simultáneos
+                    // no sobrescriben el contador ni evitan el bloqueo del tercero.
+                    const incremento = await prisma.usuario.updateMany({
+                        where: {
+                            id: usuario.id,
+                            estado: "ACTIVO",
+                            intentosFallidos: { lt: MAX_INTENTOS - 1 },
                         },
+                        data: { intentosFallidos: { increment: 1 } },
                     });
+                    if (incremento.count === 0) {
+                        await prisma.usuario.updateMany({
+                            where: {
+                                id: usuario.id,
+                                estado: "ACTIVO",
+                                intentosFallidos: { gte: MAX_INTENTOS - 1 },
+                            },
+                            data: {
+                                estado: "BLOQUEADO",
+                                intentosFallidos: { increment: 1 },
+                            },
+                        });
+                    }
                     return null;
                 }
 
-                if (usuario.intentosFallidos > 0) {
-                    await prisma.usuario.update({
-                        where: { id: usuario.id },
-                        data: { intentosFallidos: 0 },
-                    });
-                }
+                // Si cambió el estado durante bcrypt.compare, ya no autorizar.
+                const reinicio = await prisma.usuario.updateMany({
+                    where: { id: usuario.id, estado: "ACTIVO" },
+                    data: { intentosFallidos: 0 },
+                });
+                if (reinicio.count === 0) throw new CuentaBloqueada();
 
                 return {
                     id: String(usuario.id),

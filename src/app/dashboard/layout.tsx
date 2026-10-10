@@ -1,6 +1,6 @@
 
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { usuarioVigente } from "@/lib/guard";
+import { VersionUpdater } from "@/components/version-updater";
 
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
@@ -15,14 +15,11 @@ export default async function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const session = await auth();
+    const usuario = await usuarioVigente();
+    const rol = usuario.rol;
 
-    if (!session?.user) {
-        redirect("/login");
-    }
-
-    const rol = session.user.rol;
-
+    // Enviamos todos los módulos autorizados al Sidebar.
+    // El propio Sidebar decide cuáles mostrar al desplegar módulos futuros.
     const items = NAVEGACION.filter((item) =>
         item.roles.includes(rol)
     );
@@ -31,10 +28,11 @@ export default async function DashboardLayout({
         item.roles.includes(rol)
     );
 
-    const nombreUsuario = session.user.name ?? "Usuario";
+    const nombreUsuario = usuario.name;
 
     return (
         <div className="flex h-dvh overflow-hidden bg-background">
+            <VersionUpdater />
             {/* Sidebar independiente */}
             <div className="hidden h-full shrink-0 md:block">
                 <Sidebar

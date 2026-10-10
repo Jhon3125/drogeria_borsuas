@@ -67,7 +67,9 @@ export function FiltrosProductos({
             const nuevaQuery = params.toString();
             const actual = searchParams.toString();
 
-            if (nuevaQuery !== actual) {
+            const actualSinPagina = new URLSearchParams(actual);
+            actualSinPagina.delete("page");
+            if (nuevaQuery !== actualSinPagina.toString()) {
                 router.replace(
                     nuevaQuery
                         ? `${pathname}?${nuevaQuery}`

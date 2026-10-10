@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
@@ -53,14 +54,16 @@ export async function crearUsuario(
         };
     }
 
-    await prisma.usuario.create({
-        data: {
-            nombre,
-            email,
-            rol,
-            passwordHash: await bcrypt.hash(password, 12),
-        },
-    });
+    try {
+        await prisma.usuario.create({
+            data: { nombre, email, rol, passwordHash: await bcrypt.hash(password, 12) },
+        });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+            return { errores: { email: "Ya existe un usuario con este correo" }, valores: { nombre, email, rol } };
+        }
+        return { error: "No se pudo crear el usuario." };
+    }
 
     revalidatePath("/dashboard/usuarios");
     return { ok: true };

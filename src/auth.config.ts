@@ -12,7 +12,7 @@ export const authConfig = {
 
             if (enLogin) {
                 return logueado
-                    ? Response.redirect(new URL("/dashboard", nextUrl))
+                    ? Response.redirect(new URL("/dashboard/inicio", nextUrl))
                     : true;
             }
             return logueado;
