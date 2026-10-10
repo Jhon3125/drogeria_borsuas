@@ -56,7 +56,12 @@ function splitLines(value: string, font: PDFFont, size: number, maxWidth: number
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return new NextResponse("No autenticado", { status: 401 });
-  if (!ROLES_COMERCIAL.includes(session.user.rol)) return new NextResponse("Sin permisos", { status: 403 });
+  const usuarioId = Number(session.user.id);
+  if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) return new NextResponse("Sin permisos", { status: 403 });
+  const usuario = await prisma.usuario.findUnique({where: {id: usuarioId}, select: {estado: true, rol: true}});
+  if (!usuario || usuario.estado !== "ACTIVO" || !ROLES_COMERCIAL.includes(usuario.rol)) {
+    return new NextResponse("Sin permisos", { status: 403 });
+  }
 
   const { id } = await context.params;
   if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) {

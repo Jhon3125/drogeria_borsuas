@@ -1,4 +1,5 @@
 
+import Link from "next/link";
 import {
     ArrowRight,
     FolderOpen,
@@ -32,6 +33,7 @@ type Filtros = {
     q?: string;
     uso?: string;
     orden?: string;
+    page?: string;
 };
 
 export default async function CategoriasPage({
@@ -49,7 +51,7 @@ export default async function CategoriasPage({
     const uso = ["con_productos", "sin_productos"].includes(
         filtros.uso ?? ""
     )
-        ? filtros.uso
+        ? (filtros.uso ?? "todas")
         : "todas";
 
     const orden = [
@@ -58,7 +60,7 @@ export default async function CategoriasPage({
         "productos_asc",
         "productos_desc",
     ].includes(filtros.orden ?? "")
-        ? filtros.orden
+        ? (filtros.orden ?? "nombre_asc")
         : "nombre_asc";
 
     const whereCondition = {
@@ -133,6 +135,23 @@ export default async function CategoriasPage({
                 return a.nombre.localeCompare(b.nombre, "es");
         }
     });
+
+    const numeroPagina = /^\d+$/.test(filtros.page ?? "") ? Number(filtros.page) : 1;
+    const paginaPedida = Number.isSafeInteger(numeroPagina) && numeroPagina > 0 ? numeroPagina : 1;
+    const TAMANIO = 25;
+    const totalFiltradas = categoriasOrdenadas.length;
+    const totalPaginas = Math.max(1, Math.ceil(totalFiltradas / TAMANIO));
+    const pagina = Math.min(paginaPedida, totalPaginas);
+    const categoriasPagina = categoriasOrdenadas.slice((pagina - 1) * TAMANIO, pagina * TAMANIO);
+    const urlPagina = (n: number) => {
+        const params = new URLSearchParams();
+        if (busqueda) params.set("q", busqueda);
+        if (uso !== "todas") params.set("uso", uso);
+        if (orden !== "nombre_asc") params.set("orden", orden);
+        if (n > 1) params.set("page", String(n));
+        const query = params.toString();
+        return `/dashboard/categorias${query ? `?${query}` : ""}`;
+    };
 
     const hayFiltros =
         Boolean(busqueda) ||
@@ -222,7 +241,7 @@ export default async function CategoriasPage({
 
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">
-                            {categoriasOrdenadas.length} categoría(s)
+                            {totalFiltradas} categoría(s)
                             coinciden con los criterios actuales
                         </p>
 
@@ -281,7 +300,7 @@ export default async function CategoriasPage({
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                categoriasOrdenadas.map((categoria) => {
+                                categoriasPagina.map((categoria) => {
                                     const cantidad =
                                         categoria._count.productos;
 
@@ -352,11 +371,14 @@ export default async function CategoriasPage({
                     </Table>
                 </div>
 
-                <div className="border-t border-border bg-secondary/20 px-6 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-secondary/20 px-6 py-3">
                     <p className="text-xs text-muted-foreground">
-                        Mostrando {categoriasOrdenadas.length} de{" "}
-                        {totalCategorias} categoría(s) registradas.
+                        Mostrando {categoriasPagina.length} de {totalFiltradas} categoría(s) coincidentes ({totalCategorias} registradas). Página {pagina} de {totalPaginas}.
                     </p>
+                    <nav aria-label="Páginas de categorías" className="flex gap-2 text-sm">
+                        {pagina > 1 && <Link className="rounded-lg border bg-white px-3 py-1.5" href={urlPagina(pagina - 1)}>Anterior</Link>}
+                        {pagina < totalPaginas && <Link className="rounded-lg border bg-white px-3 py-1.5" href={urlPagina(pagina + 1)}>Siguiente</Link>}
+                    </nav>
                 </div>
             </section>
         </div>

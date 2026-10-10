@@ -1,5 +1,7 @@
 
 import Link from "next/link";
+import type { Prisma } from "@/generated/prisma/client";
+import type { RolUsuario, EstadoUsuario } from "@/generated/prisma/enums";
 import {
     AlertTriangle,
     ArrowRight,
@@ -31,6 +33,7 @@ type FiltrosUsuarios = {
     q?: string;
     rol?: string;
     est?: string;
+    page?: string;
 };
 
 const claseFiltro =
@@ -49,7 +52,10 @@ export default async function UsuariosPage({
     const estadoFiltro = filtros.est ?? "";
 
     // Conservamos los filtros existentes.
-    const whereCondition: any = {};
+    const whereCondition: Prisma.UsuarioWhereInput = {};
+    const numeroPagina = /^\d+$/.test(filtros.page ?? "") ? Number(filtros.page) : 1;
+    const pagina = Number.isSafeInteger(numeroPagina) && numeroPagina > 0 ? Math.min(numeroPagina, 100000) : 1;
+    const TAMANIO = 25;
 
     if (query) {
         whereCondition.OR = [
@@ -58,15 +64,15 @@ export default async function UsuariosPage({
         ];
     }
 
-    if (rolFiltro) {
-        whereCondition.rol = rolFiltro;
+    if (ROLES.includes(rolFiltro as RolUsuario)) {
+        whereCondition.rol = rolFiltro as RolUsuario;
     }
 
-    if (estadoFiltro) {
-        whereCondition.estado = estadoFiltro;
+    if (ESTADOS.includes(estadoFiltro as EstadoUsuario)) {
+        whereCondition.estado = estadoFiltro as EstadoUsuario;
     }
 
-    const [usuarios, totalUsuarios, activosCount, alertasCount] =
+    const [usuarios, totalUsuarios, activosCount, alertasCount, totalCoincidentes] =
         await Promise.all([
             prisma.usuario.findMany({
                 where: whereCondition,
@@ -79,6 +85,8 @@ export default async function UsuariosPage({
                     intentosFallidos: true,
                 },
                 orderBy: { creadoEn: "desc" },
+                take: TAMANIO,
+                skip: (pagina - 1) * TAMANIO,
             }),
             prisma.usuario.count(),
             prisma.usuario.count({
@@ -92,7 +100,17 @@ export default async function UsuariosPage({
                     ],
                 },
             }),
+            prisma.usuario.count({ where: whereCondition }),
         ]);
+    const totalPaginas = Math.max(1, Math.ceil(totalCoincidentes / TAMANIO));
+    const urlPagina = (n: number) => {
+        const params = new URLSearchParams();
+        if (query) params.set("q", query);
+        if (rolFiltro) params.set("rol", rolFiltro);
+        if (estadoFiltro) params.set("est", estadoFiltro);
+        if (n > 1) params.set("page", String(n));
+        return `/dashboard/usuarios?${params.toString()}`;
+    };
 
     const hayFiltros = Boolean(query || rolFiltro || estadoFiltro);
 
@@ -413,11 +431,14 @@ export default async function UsuariosPage({
                     </Table>
                 </div>
 
-                <div className="border-t bg-muted/10 px-6 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/10 px-6 py-3">
                     <p className="text-xs text-muted-foreground">
-                        {usuarios.length} usuario(s) mostrados de{" "}
-                        {totalUsuarios} registrados
+                        {usuarios.length} usuario(s) mostrados de {totalCoincidentes} coincidentes ({totalUsuarios} cuentas). Página {Math.min(pagina, totalPaginas)} de {totalPaginas}.
                     </p>
+                    <nav aria-label="Páginas de usuarios" className="flex gap-2 text-sm">
+                        {pagina > 1 && <Link className="rounded-lg border bg-white px-3 py-1.5" href={urlPagina(pagina - 1)}>Anterior</Link>}
+                        {pagina < totalPaginas && <Link className="rounded-lg border bg-white px-3 py-1.5" href={urlPagina(pagina + 1)}>Siguiente</Link>}
+                    </nav>
                 </div>
             </section>
         </div>

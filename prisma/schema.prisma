@@ -146,6 +146,8 @@ model Compra {
   proveedorId  Int
   fecha        DateTime @default(now())
   importeTotal Decimal  @db.Decimal(12, 2)
+  moneda       Moneda   @default(PEN)
+  tipoCambio   Decimal? @db.Decimal(12, 6) // PEN por cada USD; solo cuando hubo conversion
   estado       String   @default("COMPLETADO")
 
   proveedor Proveedor       @relation(fields: [proveedorId], references: [id])

@@ -1,4 +1,6 @@
 
+import Link from "next/link";
+import type { Prisma } from "@/generated/prisma/client";
 import {
     ArrowRight,
     Boxes,
@@ -64,7 +66,12 @@ export default async function ProductosPage({
     const monedaFiltro = filtros.mon ?? "";
     const filtroEstado = filtros.est ?? "activos";
 
-    const whereCondition: any = {};
+    const whereCondition: Prisma.ProductoWhereInput = {};
+    const paginaPedida = /^\d+$/.test(filtros.page ?? "")
+        ? Number(filtros.page) : 1;
+    const pagina = Number.isSafeInteger(paginaPedida) && paginaPedida > 0
+        ? Math.min(paginaPedida, 100000) : 1;
+    const TAMANIO = 15;
 
     if (query) {
         whereCondition.OR = [
@@ -114,7 +121,8 @@ export default async function ProductosPage({
         prisma.producto.findMany({
             where: whereCondition,
             orderBy: { id: "desc" },
-            take: 15,
+            take: TAMANIO,
+            skip: (pagina - 1) * TAMANIO,
             select: {
                 id: true,
                 codigo: true,
@@ -155,6 +163,18 @@ export default async function ProductosPage({
             },
         }),
     ]);
+
+    const totalPaginas = Math.max(1, Math.ceil(totalFiltrados / TAMANIO));
+    const urlPagina = (n: number) => {
+        const params = new URLSearchParams();
+        if (query) params.set("q", query);
+        if (filtros.cat) params.set("cat", filtros.cat);
+        if (monedaFiltro) params.set("mon", monedaFiltro);
+        if (filtroEstado !== "activos") params.set("est", filtroEstado);
+        if (n > 1) params.set("page", String(n));
+        const queryString = params.toString();
+        return `/dashboard/productos${queryString ? `?${queryString}` : ""}`;
+    };
 
     const hayFiltros =
         Boolean(query || filtros.cat || monedaFiltro) ||
@@ -485,13 +505,14 @@ export default async function ProductosPage({
                     </Table>
                 </div>
 
-                <div className="border-t border-border bg-secondary/20 px-6 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-secondary/20 px-6 py-3">
                     <p className="text-xs text-muted-foreground">
-                        Mostrando {productos.length} de{" "}
-                        {totalFiltrados} resultado(s).
-                        {totalFiltrados > 15 &&
-                            " La vista actual muestra los primeros 15 registros."}
+                        Mostrando {productos.length} de {totalFiltrados} resultado(s). Página {Math.min(pagina, totalPaginas)} de {totalPaginas}.
                     </p>
+                    <nav aria-label="Páginas del catálogo" className="flex items-center gap-2 text-sm">
+                        {pagina > 1 && <Link className="rounded-lg border bg-white px-3 py-1.5 hover:bg-slate-50" href={urlPagina(pagina - 1)}>Anterior</Link>}
+                        {pagina < totalPaginas && <Link className="rounded-lg border bg-white px-3 py-1.5 hover:bg-slate-50" href={urlPagina(pagina + 1)}>Siguiente</Link>}
+                    </nav>
                 </div>
             </section>
         </div>

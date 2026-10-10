@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
+import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ROLES_CONSULTA_INVENTARIO } from "@/lib/permisos";
 
@@ -40,6 +41,7 @@ export default async function InventarioPage({
     searchParams: Promise<{
         q?: string;
         estado?: string;
+        categoriaId?: string;
     }>;
 }) {
     await exigirRol(ROLES_CONSULTA_INVENTARIO);
@@ -52,6 +54,13 @@ export default async function InventarioPage({
     )
         ? (filtros.estado ?? "todos")
         : "todos";
+
+    const categoriaId = /^\d+$/.test(filtros.categoriaId ?? "") &&
+        Number.isSafeInteger(Number(filtros.categoriaId)) && Number(filtros.categoriaId) > 0
+        ? Number(filtros.categoriaId) : undefined;
+    const categorias = await prisma.categoria.findMany({
+        select: { id: true, nombre: true }, orderBy: { nombre: "asc" },
+    });
 
     // Solo productos con al menos un lote respaldado por una compra RECIBIDO.
     // stockActual se conserva para conciliación, NO como cifra operativa.
@@ -68,8 +77,9 @@ export default async function InventarioPage({
     const filtrados = productos.filter((p) => {
         const coincideBusqueda = p.nombre.toLowerCase().includes(q.toLowerCase()) ||
             p.codigo.toLowerCase().includes(q.toLowerCase());
-        return coincideBusqueda && (estado === "todos" ||
-            obtenerEstado(p.stockLotes, p.stockMinimo) === estado);
+        return coincideBusqueda &&
+            (categoriaId === undefined || p.categoriaId === categoriaId) &&
+            (estado === "todos" || obtenerEstado(p.stockLotes, p.stockMinimo) === estado);
     });
 
     return (
@@ -155,7 +165,7 @@ export default async function InventarioPage({
                         </Link>
                     </div>
 
-                    <FiltrosInventario q={q} estado={estado} />
+                    <FiltrosInventario q={q} estado={estado} categoriaId={categoriaId} categorias={categorias} />
 
                     <p className="text-xs text-muted-foreground">
                         {filtrados.length} producto(s) encontrados

@@ -52,11 +52,14 @@ export function FiltrosCategorias() {
                 params.delete("orden");
             }
 
-            const siguiente = params.toString();
-
-            if (siguiente !== queryActual) {
+            const sinPagina = new URLSearchParams(params);
+            sinPagina.delete("page");
+            const actualSinPagina = new URLSearchParams(queryActual);
+            actualSinPagina.delete("page");
+            const cambioFiltros = sinPagina.toString() !== actualSinPagina.toString();
+            if (cambioFiltros) {
                 router.replace(
-                    siguiente ? `${pathname}?${siguiente}` : pathname,
+                    sinPagina.toString() ? `${pathname}?${sinPagina.toString()}` : pathname,
                     { scroll: false }
                 );
             }

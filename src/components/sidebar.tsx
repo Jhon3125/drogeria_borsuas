@@ -91,6 +91,14 @@ const ICONOS_FUTUROS: Record<
     "package-search": PackageSearch,
 };
 
+// Módulos ya implementados que deben ocultarse/mostrarse mediante
+// el botón "Mostrar / Ocultar módulos futuros", sin desactivar sus rutas.
+const COMERCIALES_PLEGABLES = new Set([
+    "/dashboard/clientes",
+    "/dashboard/cotizaciones",
+    "/dashboard/ventas",
+]);
+
 const GRUPOS_FUTUROS: {
     clave: GrupoFuturo;
     titulo: string;
@@ -141,8 +149,14 @@ export function Sidebar({
 
     const [mostrarFuturos, setMostrarFuturos] = useState(false);
 
+    const comercialesPlegables = items.filter((item) =>
+        COMERCIALES_PLEGABLES.has(item.href)
+    );
+
     const principales = items.filter(
-        (item) => item.grupo === "principal"
+        (item) =>
+            item.grupo === "principal" &&
+            !COMERCIALES_PLEGABLES.has(item.href)
     );
 
     const administracion = items.filter(
@@ -265,7 +279,7 @@ export function Sidebar({
                 {/* Módulos futuros */}
 
                 {/* Control de módulos futuros */}
-                {futuros.length > 0 && (
+                {(futuros.length > 0 || comercialesPlegables.length > 0) && (
                     <section className="space-y-4">
                         <button
                             type="button"
@@ -307,7 +321,14 @@ export function Sidebar({
                                                 item.grupo === grupo.clave
                                         );
 
-                                        if (delGrupo.length === 0) {
+                                        // En "Comercial y ventas" mostramos los módulos
+                                        // reales (clicables), junto a futuros deshabilitados.
+                                        const habilitados =
+                                            grupo.clave === "comercial"
+                                                ? comercialesPlegables
+                                                : [];
+
+                                        if (delGrupo.length === 0 && habilitados.length === 0) {
                                             return null;
                                         }
 
@@ -318,6 +339,7 @@ export function Sidebar({
                                                 </TituloGrupo>
 
                                                 <div className="space-y-1">
+                                                    {habilitados.map(renderItem)}
                                                     {delGrupo.map(renderFuturo)}
                                                 </div>
                                             </section>
