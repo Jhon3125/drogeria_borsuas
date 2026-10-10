@@ -1,15 +1,19 @@
 import Link from "next/link";
-import {prisma} from "@/lib/prisma";
-import {exigirRol} from "@/lib/guard";
-import {ROLES_COMPRAS_LECTURA, ROLES_COMPRAS_GESTION, ROLES_RECEPCION} from "@/lib/compras-roles";
-import {CompraForm} from "./form";
-import {RecepcionForm} from "./recepcion-form";
+import { prisma } from "@/lib/prisma";
+import { exigirRol } from "@/lib/guard";
+import { ROLES_COMPRAS_LECTURA, ROLES_COMPRAS_GESTION, ROLES_RECEPCION } from "@/lib/compras-roles";
+import { CompraForm } from "./form";
+import { RecepcionForm } from "./recepcion-form";
 
 export default async function ComprasPage() {
   const user = await exigirRol(ROLES_COMPRAS_LECTURA);
   const [proveedores, productos, compras] = await Promise.all([
     prisma.proveedor.findMany({where: {estado: true}, select: {id: true, razonSocial: true}, orderBy: {razonSocial: "asc"}}),
-    prisma.producto.findMany({where: {estado: true}, select: {id: true, nombre: true, codigo: true}, orderBy: {nombre: "asc"}}),
+    prisma.producto.findMany({
+      where: {estado: true},
+      select: {id: true, nombre: true, codigo: true, precioCompra: true, moneda: true},
+      orderBy: {nombre: "asc"}
+    }),
     prisma.compra.findMany({take: 60, orderBy: {fecha: "desc"}, include: {
       proveedor: true,
       detalles: {include: {producto: {select: {nombre: true, codigo: true}}, recepciones: {select: {cantidad: true}}}},
@@ -21,7 +25,16 @@ export default async function ComprasPage() {
       <Link className="font-medium text-[#123E70] underline" href="/dashboard/inventario/conciliacion">Conciliar inventario y lotes</Link>
       <Link className="font-medium text-[#123E70] underline" href="/dashboard/inventario/movimientos">Historial de movimientos</Link>
     </div>
-    {ROLES_COMPRAS_GESTION.includes(user.rol) && <CompraForm proveedores={proveedores} productos={productos}/>}
+    {ROLES_COMPRAS_GESTION.includes(user.rol) && <CompraForm
+      proveedores={proveedores}
+      productos={productos.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        codigo: p.codigo,
+        precioCompra: p.precioCompra.toString(),
+        moneda: p.moneda,
+      }))}
+    />}
     <section className="space-y-4">
       <h2 className="text-xl font-bold">Compras recientes</h2>
       {compras.length === 0 && <p>Aún no hay compras registradas.</p>}
