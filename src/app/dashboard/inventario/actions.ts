@@ -62,16 +62,36 @@ export async function registrarAjusteLote(
       });
       if (!lote || !lote.producto.estado) throw new Error("Lote inexistente o producto inactivo");
       const totalRecibido = lote.recepciones.reduce((s, r) => s + r.cantidad, 0);
-      const respaldado = lote.recepciones.length > 0 &&
+
+      const respaldado =
+        lote.recepciones.length > 0 &&
         totalRecibido >= lote.cantidadInicial &&
-        lote.recepciones.every(r =>
-          ["RECIBIDO", "PARCIAL"].includes(r.compra.estado) &&
-          r.detalleCompraId > 0 && r.compraId === r.detalleCompra.compraId &&
-          r.detalleCompra.numeroLote !== null &&
-          r.detalleCompra.fechaVencimiento !== null &&
-          r.detalleCompra.numeroLote === lote.numeroLote &&
-          r.detalleCompra.fechaVencimiento.getTime() === lote.fechaVencimiento.getTime()
-        );
+        lote.recepciones.every((recepcion) => {
+          const detalle = recepcion.detalleCompra;
+
+          // La recepción debe pertenecer a la misma compra
+          // y al mismo producto del lote seleccionado.
+          const relacionValida =
+            ["RECIBIDO", "PARCIAL"].includes(
+              recepcion.compra.estado
+            ) &&
+            recepcion.detalleCompraId > 0 &&
+            recepcion.compraId === detalle.compraId &&
+            detalle.productoId === lote.productoId;
+
+          // Compatibilidad histórica:
+          // las compras anteriores guardaban lote y vencimiento
+          // directamente en DetalleCompra.
+          const loteHistoricoValido =
+            (!detalle.numeroLote ||
+              detalle.numeroLote === lote.numeroLote) &&
+            (!detalle.fechaVencimiento ||
+              detalle.fechaVencimiento.getTime() ===
+              lote.fechaVencimiento.getTime());
+
+          return relacionValida && loteHistoricoValido;
+        });
+
       if (!respaldado || lote.cantidadDisponible < 0 || lote.cantidadDisponible > lote.cantidadInicial) {
         throw new Error("El lote no está conciliado con sus recepciones. Revisa Conciliación antes de ajustarlo.");
       }

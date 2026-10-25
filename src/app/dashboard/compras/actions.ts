@@ -350,3 +350,345 @@ export async function recibirCompra(form: FormData) {
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 });
   for (const ruta of ["/dashboard/compras", "/dashboard/lotes", "/dashboard/inventario", "/dashboard/inventario/conciliacion", "/dashboard/inventario/movimientos", "/dashboard"]) revalidatePath(ruta);
 }
+
+
+export type EstadoRecepcionLotes =
+  | {
+    ok?: boolean;
+    error?: string;
+  }
+  | undefined;
+
+const partidaRecepcionSchema = z.object({
+  detalleCompraId: z.number().int().positive(),
+  cantidad: z.number().int().positive().max(1000000),
+  numeroLote: z.string().trim().min(1).max(90),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+const recepcionLotesSchema = z.object({
+  compraId: z.number().int().positive(),
+  partidas: z.array(partidaRecepcionSchema).min(1).max(100),
+});
+
+export async function recibirCompraConLotes(
+  _anterior: EstadoRecepcionLotes,
+  formulario: FormData
+): Promise<EstadoRecepcionLotes> {
+  const responsable = await exigirRol(ROLES_RECEPCION);
+  const usuarioId = Number(responsable.id);
+
+  if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) {
+    return { error: "No se pudo identificar al responsable." };
+  }
+
+  let datos: unknown;
+
+  try {
+    datos = JSON.parse(String(formulario.get("payload") ?? ""));
+  } catch {
+    return { error: "Los datos de recepción no son válidos." };
+  }
+
+  const validacion = recepcionLotesSchema.safeParse(datos);
+
+  if (!validacion.success) {
+    return {
+      error:
+        validacion.error.issues[0]?.message ??
+        "Verifica los datos de la recepción.",
+    };
+  }
+
+  const { compraId, partidas } = validacion.data;
+
+  const partidasPreparadas: Array<{
+    detalleCompraId: number;
+    cantidad: number;
+    numeroLote: string;
+    fechaVencimiento: Date;
+  }> = [];
+
+  try {
+    for (const partida of partidas) {
+      partidasPreparadas.push({
+        ...partida,
+        fechaVencimiento: dateUTC(partida.fechaVencimiento),
+      });
+    }
+  } catch {
+    return { error: "Hay una fecha de vencimiento inválida." };
+  }
+
+  // El mismo producto/lote debe conservar una sola fecha de
+  // vencimiento, aunque llegue en varias líneas comerciales.
+  const fechasPorLote = new Map<string, number>();
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const compra = await tx.compra.findUnique({
+          where: { id: compraId },
+          include: {
+            detalles: {
+              include: {
+                recepciones: {
+                  select: { cantidad: true },
+                },
+              },
+            },
+          },
+        });
+
+        if (
+          !compra ||
+          !["PENDIENTE", "PARCIAL"].includes(compra.estado)
+        ) {
+          throw new Error(
+            "Esta orden no admite nuevas recepciones."
+          );
+        }
+
+        const detalles = new Map(
+          compra.detalles.map((detalle) => [
+            detalle.id,
+            detalle,
+          ])
+        );
+
+        const recibidasPorDetalle = new Map<number, number>();
+
+        for (const partida of partidasPreparadas) {
+          const detalle = detalles.get(partida.detalleCompraId);
+
+          if (!detalle) {
+            throw new Error(
+              "Una partida no corresponde a esta Orden de Compra."
+            );
+          }
+
+          const recibidas = detalle.recepciones.reduce(
+            (total, recepcion) => total + recepcion.cantidad,
+            0
+          );
+
+          const pendiente = detalle.cantidad - recibidas;
+
+          if (pendiente < 0) {
+            throw new Error(
+              "La orden contiene cantidades inconsistentes."
+            );
+          }
+
+          const acumulado =
+            (recibidasPorDetalle.get(detalle.id) ?? 0) +
+            partida.cantidad;
+
+          if (acumulado > pendiente) {
+            throw new Error(
+              `La recepción supera las unidades pendientes de la línea #${detalle.id}.`
+            );
+          }
+
+          recibidasPorDetalle.set(detalle.id, acumulado);
+
+          const claveLote = JSON.stringify([
+            detalle.productoId,
+            partida.numeroLote,
+          ]);
+
+          const fecha = partida.fechaVencimiento.getTime();
+          const fechaAnterior = fechasPorLote.get(claveLote);
+
+          if (
+            fechaAnterior !== undefined &&
+            fechaAnterior !== fecha
+          ) {
+            throw new Error(
+              `El lote ${partida.numeroLote} tiene vencimientos diferentes.`
+            );
+          }
+
+          fechasPorLote.set(claveLote, fecha);
+        }
+
+        // Se bloquea lógicamente la orden antes de modificar
+        // lotes o inventario. La transacción es serializable.
+        const completamenteRecibida = compra.detalles.every(
+          (detalle) => {
+            const anterior = detalle.recepciones.reduce(
+              (total, r) => total + r.cantidad,
+              0
+            );
+
+            const nueva =
+              recibidasPorDetalle.get(detalle.id) ?? 0;
+
+            return anterior + nueva === detalle.cantidad;
+          }
+        );
+
+        const siguienteEstado = completamenteRecibida
+          ? "RECIBIDO"
+          : "PARCIAL";
+
+        const cambio = await tx.compra.updateMany({
+          where: {
+            id: compraId,
+            estado: compra.estado,
+          },
+          data: {
+            estado: siguienteEstado,
+          },
+        });
+
+        if (cambio.count !== 1) {
+          throw new Error(
+            "La orden cambió de estado. Actualiza la página."
+          );
+        }
+
+        for (const partida of partidasPreparadas) {
+          const detalle = detalles.get(partida.detalleCompraId)!;
+
+          const producto = await tx.producto.findFirst({
+            where: {
+              id: detalle.productoId,
+              estado: true,
+            },
+            select: { id: true },
+          });
+
+          if (!producto) {
+            throw new Error(
+              "No se puede recibir un producto inexistente o inactivo."
+            );
+          }
+
+          const identificadorLote = {
+            numeroLote: partida.numeroLote,
+            productoId: detalle.productoId,
+          };
+
+          const loteExistente = await tx.lote.findUnique({
+            where: {
+              numeroLote_productoId: identificadorLote,
+            },
+          });
+
+          if (
+            loteExistente &&
+            loteExistente.fechaVencimiento.getTime() !==
+            partida.fechaVencimiento.getTime()
+          ) {
+            throw new Error(
+              `El lote ${partida.numeroLote} ya existe con otro vencimiento.`
+            );
+          }
+
+          const lote = await tx.lote.upsert({
+            where: {
+              numeroLote_productoId: identificadorLote,
+            },
+            create: {
+              productoId: detalle.productoId,
+              numeroLote: partida.numeroLote,
+              fechaVencimiento: partida.fechaVencimiento,
+              cantidadInicial: partida.cantidad,
+              cantidadDisponible: partida.cantidad,
+            },
+            update: {
+              cantidadInicial: {
+                increment: partida.cantidad,
+              },
+              cantidadDisponible: {
+                increment: partida.cantidad,
+              },
+            },
+          });
+
+          await tx.recepcionCompra.create({
+            data: {
+              compraId,
+              detalleCompraId: detalle.id,
+              loteId: lote.id,
+              usuarioId,
+              cantidad: partida.cantidad,
+            },
+          });
+
+          await tx.producto.update({
+            where: { id: detalle.productoId },
+            data: {
+              stockActual: {
+                increment: partida.cantidad,
+              },
+            },
+          });
+
+          await tx.movimientoInventario.create({
+            data: {
+              productoId: detalle.productoId,
+              loteId: lote.id,
+              usuarioId,
+              tipo: "ENTRADA_COMPRA",
+              cantidad: partida.cantidad,
+              motivo:
+                `Recepción OC-${String(compraId).padStart(4, "0")}, ` +
+                `línea #${detalle.id}, lote ${partida.numeroLote}`,
+            },
+          });
+        }
+      },
+      {
+        isolationLevel:
+          Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 20000,
+      }
+    );
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2034"
+    ) {
+      return {
+        error:
+          "Otra operación modificó esta orden o el inventario. Actualiza la página e inténtalo nuevamente.",
+      };
+    }
+
+    console.error("Error de recepción de OC:", error);
+
+    if (
+      error instanceof Error &&
+      (
+        error.message.startsWith("La ") ||
+        error.message.startsWith("Esta ") ||
+        error.message.startsWith("Una ") ||
+        error.message.startsWith("El ") ||
+        error.message.startsWith("No se puede")
+      )
+    ) {
+      return { error: error.message };
+    }
+
+    return {
+      error:
+        "No se pudo registrar la recepción. Revisa los datos e inténtalo nuevamente.",
+    };
+  }
+
+  for (const ruta of [
+    "/dashboard/compras",
+    `/dashboard/compras/${compraId}`,
+    "/dashboard/inventario",
+    "/dashboard/inventario/conciliacion",
+    "/dashboard/inventario/movimientos",
+    "/dashboard/lotes",
+    "/dashboard",
+  ]) {
+    revalidatePath(ruta);
+  }
+
+  return { ok: true };
+}

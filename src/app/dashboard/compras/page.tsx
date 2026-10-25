@@ -18,6 +18,12 @@ import {
   ROLES_COMPRAS_GESTION,
 } from "@/lib/compras-roles";
 
+import {
+  calcularSituacionEntrega,
+  formatearFechaEntrega,
+  type SituacionEntrega,
+} from "@/lib/compras/seguimiento-entregas";
+
 import type { Prisma } from "@/generated/prisma/client";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -70,6 +76,62 @@ function claseEstado(estado: string) {
       return "bg-secondary text-secondary-foreground";
   }
 }
+
+const configuracionEntrega: Record<
+  SituacionEntrega,
+  { texto: string; clase: string }
+> = {
+  RECIBIDA: {
+    texto: "Recibida",
+    clase: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  SIN_FECHA: {
+    texto: "Sin fecha",
+    clase: "bg-slate-50 text-slate-600 border-slate-200",
+  },
+  ATRASADA: {
+    texto: "Atrasada",
+    clase: "bg-red-50 text-red-700 border-red-200",
+  },
+  HOY: {
+    texto: "Vence hoy",
+    clase: "bg-amber-50 text-amber-800 border-amber-200",
+  },
+  PROGRAMADA: {
+    texto: "Programada",
+    clase: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+};
+
+function IndicadorEntrega({
+  estado,
+  fecha,
+}: {
+  estado: string;
+  fecha: Date | null;
+}) {
+  const situacion = calcularSituacionEntrega({
+    estado,
+    fechaEntregaEstimada: fecha,
+  });
+
+  const configuracion = configuracionEntrega[situacion];
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm text-foreground">
+        {formatearFechaEntrega(fecha)}
+      </span>
+
+      <span
+        className={`w-fit whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${configuracion.clase}`}
+      >
+        {configuracion.texto}
+      </span>
+    </div>
+  );
+}
+
 
 export default async function ComprasPage({
   searchParams,
@@ -317,29 +379,13 @@ export default async function ComprasPage({
           <Table>
             <TableHeader>
               <TableRow className="bg-secondary/40 hover:bg-secondary/40">
-                <TableHead className="pl-6">
-                  Orden
-                </TableHead>
-
-                <TableHead>
-                  Proveedor
-                </TableHead>
-
-                <TableHead>
-                  Importe
-                </TableHead>
-
-                <TableHead>
-                  Estado
-                </TableHead>
-
-                <TableHead className="min-w-48">
-                  Recepción
-                </TableHead>
-
-                <TableHead className="pr-6 text-right">
-                  Acciones
-                </TableHead>
+                <TableHead className="pl-6">Orden</TableHead>
+                <TableHead>Proveedor</TableHead>
+                <TableHead>Entrega estimada</TableHead>
+                <TableHead>Importe</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="min-w-48">Recepción</TableHead>
+                <TableHead className="pr-6 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -347,7 +393,7 @@ export default async function ComprasPage({
               {compras.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="h-56 text-center"
                   >
                     <div className="flex flex-col items-center gap-3">
@@ -436,6 +482,13 @@ export default async function ComprasPage({
                               .razonSocial
                           }
                         </p>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <IndicadorEntrega
+                          estado={compra.estado}
+                          fecha={compra.fechaEntregaEstimada}
+                        />
                       </TableCell>
 
                       <TableCell className="whitespace-nowrap">

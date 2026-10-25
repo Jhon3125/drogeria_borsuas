@@ -1,6 +1,8 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RecepcionDialog } from "../recepcion-dialog";
+import { ROLES_RECEPCION } from "@/lib/compras-roles";
 import {
     ArrowLeft,
     ArrowRight,
@@ -84,7 +86,9 @@ function fechaLote(fecha: Date) {
 export default async function OrdenCompraDetallePage({
     params,
 }: Props) {
-    await exigirRol(ROLES_COMPRAS_LECTURA);
+    const usuario = await exigirRol(ROLES_COMPRAS_LECTURA);
+
+    const puedeRecepcionar = ROLES_RECEPCION.includes(usuario.rol);
 
     const { id } = await params;
     const compraId = Number(id);
@@ -123,6 +127,11 @@ export default async function OrdenCompraDetallePage({
                                     fechaVencimiento: true,
                                 },
                             },
+                            usuario: {
+                                select: {
+                                    nombre: true,
+                                },
+                            },
                         },
                     },
                 },
@@ -145,6 +154,16 @@ export default async function OrdenCompraDetallePage({
             pendiente: Math.max(0, detalle.cantidad - recibido),
         };
     });
+
+    const lineasRecepcion = detalles
+        .filter((detalle) => detalle.pendiente > 0)
+        .map((detalle) => ({
+            id: detalle.id,
+            codigo: detalle.producto.codigo,
+            nombre: detalle.producto.nombre,
+            precioUnitario: `${monedaTexto(compra.moneda)} ${detalle.precioUnitario.toFixed(2)}`,
+            pendiente: detalle.pendiente,
+        }));
 
     const totalSolicitado = detalles.reduce(
         (total, detalle) => total + detalle.cantidad,
@@ -181,6 +200,8 @@ export default async function OrdenCompraDetallePage({
             lote: recepcion.lote.numeroLote,
             vencimiento:
                 recepcion.lote.fechaVencimiento,
+            fecha: recepcion.fecha,
+            responsable: recepcion.usuario?.nombre ?? "Sin responsable registrado",
         }))
     );
 
@@ -274,8 +295,8 @@ export default async function OrdenCompraDetallePage({
                     <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
                         <div
                             className={`h-full rounded-full ${porcentaje === 100
-                                    ? "bg-emerald-500"
-                                    : "bg-[#087EBD]"
+                                ? "bg-emerald-500"
+                                : "bg-[#087EBD]"
                                 }`}
                             style={{ width: `${porcentaje}%` }}
                         />
@@ -454,17 +475,24 @@ export default async function OrdenCompraDetallePage({
                     </div>
                 </div>
 
+
                 {totalPendiente === 0 ? (
                     <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                         <CheckCircle2 className="h-4 w-4" />
                         Recepción completa
                     </span>
+                ) : puedeRecepcionar &&
+                    ["PENDIENTE", "PARCIAL"].includes(compra.estado) ? (
+                    <RecepcionDialog
+                        compraId={compra.id}
+                        lineas={lineasRecepcion}
+                    />
                 ) : (
-                    <span className="inline-flex items-center gap-2 rounded-lg border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
-                        <Clock3 className="h-4 w-4" />
-                        Registro de recepción en preparación
+                    <span className="rounded-lg border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+                        Recepción no disponible para este usuario o estado
                     </span>
                 )}
+
             </section>
 
             {/* Historial disponible */}
@@ -500,20 +528,29 @@ export default async function OrdenCompraDetallePage({
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-secondary/40 hover:bg-secondary/40">
-                                    <TableHead className="pl-6">
-                                        Producto
-                                    </TableHead>
+                                    <TableHead className="pl-6">Fecha de recepción</TableHead>
+                                    <TableHead>Producto</TableHead>
                                     <TableHead>Lote</TableHead>
                                     <TableHead>Vencimiento</TableHead>
-                                    <TableHead className="pr-6 text-right">
-                                        Recibido
-                                    </TableHead>
+                                    <TableHead>Responsable</TableHead>
+                                    <TableHead className="pr-6 text-right">Recibido</TableHead>
                                 </TableRow>
                             </TableHeader>
 
                             <TableBody>
                                 {recepciones.map((recepcion) => (
                                     <TableRow key={recepcion.id}>
+                                        <TableCell className="whitespace-nowrap text-sm">
+                                            {new Intl.DateTimeFormat("es-PE", {
+                                                dateStyle: "medium",
+                                                timeStyle: "short",
+                                                timeZone: "America/Lima",
+                                            }).format(recepcion.fecha)}
+                                        </TableCell>
+
+                                        <TableCell className="text-sm">
+                                            {recepcion.responsable}
+                                        </TableCell>
                                         <TableCell className="pl-6">
                                             <p className="font-medium">
                                                 {recepcion.producto}
