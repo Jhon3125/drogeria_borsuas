@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { crearCompra } from "./actions";
 
 type Moneda = "PEN" | "USD";
@@ -40,15 +40,23 @@ function sugerirCosto(producto: Opcion | undefined, moneda: Moneda, tc: string) 
 export function CompraForm({
   proveedores,
   productos,
+  onExito,
 }: {
   proveedores: { id: number; razonSocial: string }[];
   productos: Opcion[];
+  onExito?: () => void;
 }) {
   const [proveedorId, setProveedorId] = useState(0);
   const [moneda, setMoneda] = useState<Moneda>("PEN");
   const [tipoCambio, setTipoCambio] = useState("");
   const [items, setItems] = useState<Item[]>([vacio()]);
   const [state, action, pending] = useActionState(crearCompra, undefined);
+
+  useEffect(() => {
+    if (state?.ok) {
+      onExito?.();
+    }
+  }, [state?.ok, onExito]);
 
   const cambiarMoneda = (siguiente: Moneda) => {
     setMoneda(siguiente);
@@ -105,9 +113,13 @@ export function CompraForm({
   });
 
   return (
-    <form action={action} className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
-      <h2 className="text-xl font-bold text-[#123E70]">Registrar compra</h2>
-      <p className="text-sm text-slate-600">La compra queda pendiente y no aumenta el stock hasta confirmar su recepción.</p>
+    <form action={action} className="space-y-5 px-1 pb-2">
+      <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3">
+        <p className="text-sm text-[#123E70]">
+          La orden no incrementará el inventario hasta que
+          se confirme la recepción de la mercadería.
+        </p>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block text-sm font-semibold">
