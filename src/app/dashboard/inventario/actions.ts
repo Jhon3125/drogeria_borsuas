@@ -51,11 +51,13 @@ export async function registrarAjusteLote(
         where: { id: loteId },
         include: {
           producto: { select: { id: true, estado: true, stockActual: true } },
-          recepciones: { select: {
-            cantidad: true, compraId: true, detalleCompraId: true,
-            compra: { select: { estado: true } },
-            detalleCompra: { select: { compraId: true, productoId: true, numeroLote: true, fechaVencimiento: true } },
-          } },
+          recepciones: {
+            select: {
+              cantidad: true, compraId: true, detalleCompraId: true,
+              compra: { select: { estado: true } },
+              detalleCompra: { select: { compraId: true, productoId: true, numeroLote: true, fechaVencimiento: true } },
+            }
+          },
         },
       });
       if (!lote || !lote.producto.estado) throw new Error("Lote inexistente o producto inactivo");
@@ -65,7 +67,8 @@ export async function registrarAjusteLote(
         lote.recepciones.every(r =>
           ["RECIBIDO", "PARCIAL"].includes(r.compra.estado) &&
           r.detalleCompraId > 0 && r.compraId === r.detalleCompra.compraId &&
-          r.detalleCompra.productoId === lote.productoId &&
+          r.detalleCompra.numeroLote !== null &&
+          r.detalleCompra.fechaVencimiento !== null &&
           r.detalleCompra.numeroLote === lote.numeroLote &&
           r.detalleCompra.fechaVencimiento.getTime() === lote.fechaVencimiento.getTime()
         );

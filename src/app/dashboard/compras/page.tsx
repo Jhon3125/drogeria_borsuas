@@ -9,6 +9,8 @@ import {
   Eye,
 } from "lucide-react";
 
+import Link from "next/link";
+
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import {
@@ -488,9 +490,9 @@ export default async function ComprasPage({
                           >
                             <div
                               className={`h-full rounded-full transition-all ${porcentaje ===
-                                  100
-                                  ? "bg-emerald-500"
-                                  : "bg-[#087EBD]"
+                                100
+                                ? "bg-emerald-500"
+                                : "bg-[#087EBD]"
                                 }`}
                               style={{
                                 width: `${porcentaje}%`,
@@ -501,15 +503,13 @@ export default async function ComprasPage({
                       </TableCell>
 
                       <TableCell className="pr-6 text-right">
-                        <button
-                          type="button"
-                          disabled
-                          title="El detalle estará disponible en la siguiente etapa"
-                          className="inline-flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium text-muted-foreground opacity-60"
+                        <Link
+                          href={`/dashboard/compras/${compra.id}`}
+                          className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-input bg-background px-3 text-sm font-medium text-primary shadow-xs transition-colors hover:bg-secondary"
                         >
                           <Eye className="h-4 w-4" />
                           Ver detalle
-                        </button>
+                        </Link>
                       </TableCell>
                     </TableRow>
                   );

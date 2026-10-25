@@ -17,20 +17,18 @@ import { CompraForm } from "./form";
 
 type Moneda = "PEN" | "USD";
 
-type ProductoOpcion = {
-    id: number;
-    nombre: string;
-    codigo: string;
-    precioCompra: string;
-    moneda: Moneda;
-};
-
 type Props = {
     proveedores: {
         id: number;
         razonSocial: string;
     }[];
-    productos: ProductoOpcion[];
+    productos: {
+        id: number;
+        nombre: string;
+        codigo: string;
+        precioCompra: string;
+        moneda: Moneda;
+    }[];
 };
 
 export function CompraDialog({
@@ -44,7 +42,8 @@ export function CompraDialog({
     }, []);
 
     const sinOpciones =
-        proveedores.length === 0 || productos.length === 0;
+        proveedores.length === 0 ||
+        productos.length === 0;
 
     return (
         <>
@@ -54,8 +53,8 @@ export function CompraDialog({
                 disabled={sinOpciones}
                 title={
                     sinOpciones
-                        ? "Necesitas proveedores y productos activos"
-                        : "Registrar nueva orden de compra"
+                        ? "Se requieren proveedores y productos activos"
+                        : "Registrar nueva Orden de Compra"
                 }
                 className="h-10 gap-2 shadow-xs"
             >
@@ -63,9 +62,12 @@ export function CompraDialog({
                 Nueva orden de compra
             </Button>
 
-            <Dialog open={abierto} onOpenChange={setAbierto}>
-                <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden sm:max-w-5xl">
-                    <DialogHeader className="shrink-0 space-y-3 border-b pb-4">
+            <Dialog
+                open={abierto}
+                onOpenChange={setAbierto}
+            >
+                <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-2rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+                    <DialogHeader className="shrink-0 space-y-3 border-b px-5 pb-5 pt-6 sm:px-7">
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-primary">
                             <ClipboardList className="h-5 w-5" />
                         </div>
@@ -75,18 +77,19 @@ export function CompraDialog({
                         </DialogTitle>
 
                         <DialogDescription>
-                            Registra los productos solicitados al
-                            proveedor. La orden quedará pendiente
-                            hasta confirmar la recepción física.
+                            Registra los productos solicitados,
+                            condiciones comerciales y entrega estimada.
+                            Los lotes se identificarán al recibir.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="min-h-0 overflow-y-auto py-2">
+                    <div className="borsuas-content-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7">
                         {abierto && (
                             <CompraForm
                                 proveedores={proveedores}
                                 productos={productos}
                                 onExito={cerrar}
+                                onCancelar={cerrar}
                             />
                         )}
                     </div>
