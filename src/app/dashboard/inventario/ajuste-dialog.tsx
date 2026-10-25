@@ -5,7 +5,7 @@ import { useActionState, useEffect, useState } from "react";
 import {
     ArrowDownCircle,
     ArrowUpCircle,
-    Boxes,
+    ClipboardPenLine,
     Loader2,
     Plus,
 } from "lucide-react";
@@ -22,164 +22,196 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-import { registrarAjuste } from "./actions";
+import { registrarAjusteLote } from "./actions";
 
-type ProductoOpcion = {
+export type OpcionLote = {
+    id: number;
+    numeroLote: string;
+    cantidadDisponible: number;
+    cantidadInicial: number;
+    fechaVencimiento: string;
+};
+
+export type OpcionProductoInventario = {
     id: number;
     codigo: string;
     nombre: string;
-    stockActual: number;
+    lotes: OpcionLote[];
 };
 
-function FormularioAjuste({
-    productos,
-    productoId,
-    onCerrar,
+type TipoAjuste = "AJUSTE_POSITIVO" | "AJUSTE_NEGATIVO";
+
+export function FormularioAjusteLote({
+    lote,
+    onExito,
+    onCancelar,
 }: {
-    productos: ProductoOpcion[];
-    productoId?: number;
-    onCerrar: () => void;
+    lote: OpcionLote;
+    onExito: () => void;
+    onCancelar: () => void;
 }) {
     const [estado, formAction, pendiente] = useActionState(
-        registrarAjuste,
+        registrarAjusteLote,
         undefined
     );
 
-    const [tipo, setTipo] = useState<
-        "AJUSTE_POSITIVO" | "AJUSTE_NEGATIVO"
-    >("AJUSTE_POSITIVO");
-
-    const [seleccion, setSeleccion] = useState(
-        String(productoId ?? productos[0]?.id ?? "")
+    const [tipo, setTipo] = useState<TipoAjuste>(
+        "AJUSTE_NEGATIVO"
     );
 
-    const productoSeleccionado = productos.find(
-        (producto) => producto.id === Number(seleccion)
-    );
+    const [cantidad, setCantidad] = useState("");
+
+    const [motivo, setMotivo] = useState("");
+
+    const cantidadNumero = Number(cantidad);
+
+    const maximo =
+        tipo === "AJUSTE_POSITIVO"
+            ? lote.cantidadInicial - lote.cantidadDisponible
+            : lote.cantidadDisponible;
+
+    const cantidadValida =
+        cantidad.trim() !== "" &&
+        Number.isSafeInteger(cantidadNumero) &&
+        cantidadNumero > 0 &&
+        cantidadNumero <= maximo &&
+        cantidadNumero <= 1000000;
 
     useEffect(() => {
-        if (estado?.ok) onCerrar();
-    }, [estado?.ok, onCerrar]);
+        if (estado?.ok) {
+            onExito();
+        }
+    }, [estado?.ok, onExito]);
 
     return (
         <form action={formAction} className="space-y-5">
-            <div className="space-y-2">
-                <Label htmlFor="productoId">Producto</Label>
-                <select
-                    id="productoId"
-                    name="productoId"
-                    value={seleccion}
-                    onChange={(e) => setSeleccion(e.target.value)}
-                    disabled={pendiente}
-                    required
-                    className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                    {productos.map((producto) => (
-                        <option key={producto.id} value={producto.id}>
-                            {producto.codigo} - {producto.nombre}
-                        </option>
-                    ))}
-                </select>
-                {estado?.errores?.productoId && (
-                    <p className="text-xs text-destructive">
-                        {estado.errores.productoId}
-                    </p>
-                )}
+            <input
+                type="hidden"
+                name="loteId"
+                value={lote.id}
+            />
+
+            <div className="rounded-xl border bg-secondary/40 p-4">
+                <p className="text-xs text-muted-foreground">
+                    Lote seleccionado
+                </p>
+
+                <p className="mt-1 text-sm font-semibold">
+                    {lote.numeroLote}
+                </p>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                        <p className="text-xs text-muted-foreground">
+                            Disponible
+                        </p>
+                        <p className="mt-1 text-xl font-bold text-primary">
+                            {lote.cantidadDisponible}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p className="text-xs text-muted-foreground">
+                            Cantidad inicial
+                        </p>
+                        <p className="mt-1 text-xl font-bold">
+                            {lote.cantidadInicial}
+                        </p>
+                    </div>
+                </div>
             </div>
 
-            {productoSeleccionado && (
-                <div className="rounded-lg border bg-secondary/40 p-3">
-                    <p className="text-xs text-muted-foreground">
-                        Existencias actuales
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-primary">
-                        {productoSeleccionado.stockActual} unidades
-                    </p>
-                </div>
-            )}
-
             <div className="space-y-2">
-                <Label htmlFor="tipo">Tipo de ajuste</Label>
+                <Label htmlFor={`tipo-${lote.id}`}>
+                    Tipo de ajuste
+                </Label>
+
                 <select
-                    id="tipo"
+                    id={`tipo-${lote.id}`}
                     name="tipo"
                     value={tipo}
                     onChange={(e) =>
-                        setTipo(
-                            e.target.value as
-                            | "AJUSTE_POSITIVO"
-                            | "AJUSTE_NEGATIVO"
-                        )
+                        setTipo(e.target.value as TipoAjuste)
                     }
                     disabled={pendiente}
-                    className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                 >
-                    <option value="AJUSTE_POSITIVO">
-                        Entrada manual (+)
-                    </option>
                     <option value="AJUSTE_NEGATIVO">
-                        Salida manual (-)
+                        Ajuste negativo — descontar
+                    </option>
+                    <option value="AJUSTE_POSITIVO">
+                        Ajuste positivo — corregir conteo
                     </option>
                 </select>
             </div>
 
             <div
-                className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${tipo === "AJUSTE_POSITIVO"
+                className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${tipo === "AJUSTE_POSITIVO"
                         ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                         : "border-amber-200 bg-amber-50 text-amber-800"
                     }`}
             >
                 {tipo === "AJUSTE_POSITIVO" ? (
-                    <ArrowUpCircle className="h-5 w-5" />
+                    <ArrowUpCircle className="mt-0.5 h-5 w-5 shrink-0" />
                 ) : (
-                    <ArrowDownCircle className="h-5 w-5" />
+                    <ArrowDownCircle className="mt-0.5 h-5 w-5 shrink-0" />
                 )}
-                {tipo === "AJUSTE_POSITIVO"
-                    ? "Se incrementarán las existencias del producto."
-                    : "Se descontarán unidades del stock disponible."}
+
+                <span>
+                    {tipo === "AJUSTE_POSITIVO"
+                        ? "Se devolverán unidades al saldo del lote, sin superar su cantidad inicial."
+                        : "Se descontarán unidades del saldo disponible del lote."}
+                </span>
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="cantidad">Cantidad</Label>
+                <Label htmlFor={`cantidad-${lote.id}`}>
+                    Cantidad
+                </Label>
+
                 <Input
-                    id="cantidad"
+                    id={`cantidad-${lote.id}`}
                     name="cantidad"
                     type="number"
                     min="1"
-                    max="1000000"
+                    max={Math.min(maximo, 1000000)}
                     step="1"
-                    placeholder="Ej. 20"
+                    value={cantidad}
+                    onChange={(e) => setCantidad(e.target.value)}
+                    disabled={pendiente || maximo <= 0}
+                    placeholder="Ingresa la cantidad"
                     required
-                    disabled={pendiente}
                     className="h-10"
                 />
-                {estado?.errores?.cantidad && (
-                    <p className="text-xs text-destructive">
-                        {estado.errores.cantidad}
-                    </p>
-                )}
+
+                <p className="text-xs text-muted-foreground">
+                    Máximo permitido para este tipo de ajuste:{" "}
+                    <strong>{Math.min(maximo, 1000000)}</strong> unidades.
+                </p>
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="motivo">
+                <Label htmlFor={`motivo-${lote.id}`}>
                     Motivo del ajuste
                 </Label>
+
                 <Textarea
-                    id="motivo"
+                    id={`motivo-${lote.id}`}
                     name="motivo"
-                    placeholder="Ej. Registro inicial de existencias según conteo físico..."
-                    required
-                    minLength={5}
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    placeholder="Describe el resultado del conteo físico o la incidencia detectada..."
+                    minLength={8}
                     maxLength={500}
+                    rows={4}
+                    required
                     disabled={pendiente}
-                    rows={3}
                     className="resize-none"
                 />
-                {estado?.errores?.motivo && (
-                    <p className="text-xs text-destructive">
-                        {estado.errores.motivo}
-                    </p>
-                )}
+
+                <p className="text-xs text-muted-foreground">
+                    Obligatorio: entre 8 y 500 caracteres.
+                </p>
             </div>
 
             {estado?.error && (
@@ -195,17 +227,28 @@ function FormularioAjuste({
                 <Button
                     type="button"
                     variant="outline"
+                    onClick={onCancelar}
                     disabled={pendiente}
-                    onClick={onCerrar}
                 >
                     Cancelar
                 </Button>
-                <Button type="submit" disabled={pendiente}>
+
+                <Button
+                    type="submit"
+                    disabled={
+                        pendiente ||
+                        !cantidadValida ||
+                        motivo.trim().length < 8 ||
+                        motivo.trim().length > 500
+                    }
+                    className="gap-2"
+                >
                     {pendiente ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                        <Boxes className="mr-2 h-4 w-4" />
+                        <ClipboardPenLine className="h-4 w-4" />
                     )}
+
                     {pendiente
                         ? "Registrando..."
                         : "Registrar ajuste"}
@@ -217,53 +260,120 @@ function FormularioAjuste({
 
 export function AjusteDialog({
     productos,
-    productoId,
 }: {
-    productos: ProductoOpcion[];
-    productoId?: number;
+    productos: OpcionProductoInventario[];
 }) {
     const [abierto, setAbierto] = useState(false);
+
+    const [productoId, setProductoId] = useState(
+        String(productos[0]?.id ?? "")
+    );
+
+    const productoSeleccionado = productos.find(
+        (p) => p.id === Number(productoId)
+    );
+
+    const [loteId, setLoteId] = useState(
+        String(productos[0]?.lotes[0]?.id ?? "")
+    );
+
+    const loteSeleccionado = productoSeleccionado?.lotes.find(
+        (l) => l.id === Number(loteId)
+    );
+
+    function cambiarProducto(id: string) {
+        setProductoId(id);
+
+        const siguiente = productos.find(
+            (p) => p.id === Number(id)
+        );
+
+        setLoteId(String(siguiente?.lotes[0]?.id ?? ""));
+    }
+
+    function cerrar() {
+        setAbierto(false);
+    }
 
     return (
         <>
             <Button
                 type="button"
-                size={productoId ? "sm" : "default"}
-                variant={productoId ? "outline" : "default"}
-                disabled={productos.length === 0}
                 onClick={() => setAbierto(true)}
-                className="gap-2"
+                disabled={productos.length === 0}
+                className="h-10 gap-2"
             >
-                {productoId ? (
-                    "Ajustar"
-                ) : (
-                    <>
-                        <Plus className="h-4 w-4" />
-                        Nuevo ajuste
-                    </>
-                )}
+                <Plus className="h-4 w-4" />
+                Nuevo ajuste
             </Button>
 
             <Dialog open={abierto} onOpenChange={setAbierto}>
                 <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
                     <DialogHeader className="space-y-3 pb-2">
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-primary">
-                            <Boxes className="h-5 w-5" />
+                            <ClipboardPenLine className="h-5 w-5" />
                         </div>
+
                         <DialogTitle className="text-xl">
-                            Ajuste de inventario
+                            Ajuste manual de inventario
                         </DialogTitle>
+
                         <DialogDescription>
-                            Registra una entrada o salida manual
-                            con su motivo correspondiente.
+                            Selecciona un producto y un lote respaldado.
+                            El ajuste registrará automáticamente al
+                            responsable autenticado.
                         </DialogDescription>
                     </DialogHeader>
 
-                    {abierto && (
-                        <FormularioAjuste
-                            productos={productos}
-                            productoId={productoId}
-                            onCerrar={() => setAbierto(false)}
+                    <div className="space-y-2">
+                        <Label htmlFor="ajuste-producto">
+                            Producto
+                        </Label>
+
+                        <select
+                            id="ajuste-producto"
+                            value={productoId}
+                            onChange={(e) =>
+                                cambiarProducto(e.target.value)
+                            }
+                            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        >
+                            {productos.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.codigo} — {p.nombre}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="ajuste-lote">
+                            Lote
+                        </Label>
+
+                        <select
+                            id="ajuste-lote"
+                            value={loteId}
+                            onChange={(e) =>
+                                setLoteId(e.target.value)
+                            }
+                            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        >
+                            {productoSeleccionado?.lotes.map((lote) => (
+                                <option key={lote.id} value={lote.id}>
+                                    {lote.numeroLote} —{" "}
+                                    {lote.cantidadDisponible} disponibles
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {abierto && loteSeleccionado && (
+                        <FormularioAjusteLote
+                            key={loteSeleccionado.id}
+                            lote={loteSeleccionado}
+                            onExito={cerrar}
+                            onCancelar={cerrar}
                         />
                     )}
                 </DialogContent>
