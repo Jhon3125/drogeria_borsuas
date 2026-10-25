@@ -141,33 +141,42 @@ model Proveedor {
   compras Compra[]
 }
 
-model Compra {
-  id           Int      @id @default(autoincrement())
-  proveedorId  Int
-  fecha        DateTime @default(now())
-  importeTotal Decimal  @db.Decimal(12, 2)
-  moneda       Moneda   @default(PEN)
-  tipoCambio   Decimal? @db.Decimal(12, 6) // PEN por cada USD; solo cuando hubo conversion
-  estado       String   @default("COMPLETADO")
 
-  proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
-  detalles  DetalleCompra[]
-  recepciones RecepcionCompra[]
+model Compra {
+  id                    Int       @id @default(autoincrement())
+  proveedorId           Int
+  fecha                 DateTime  @default(now())
+  fechaEntregaEstimada  DateTime?
+  observaciones         String?
+  importeTotal          Decimal   @db.Decimal(12, 2)
+  moneda                Moneda    @default(PEN)
+  tipoCambio            Decimal?  @db.Decimal(12, 6)
+  estado                String    @default("COMPLETADO")
+
+  proveedor             Proveedor        @relation(fields: [proveedorId], references: [id])
+  detalles              DetalleCompra[]
+  recepciones           RecepcionCompra[]
 }
 
+
+
 model DetalleCompra {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
   compraId         Int
   productoId       Int
   cantidad         Int
-  precioUnitario   Decimal  @db.Decimal(12, 2)
-  numeroLote       String
-  fechaVencimiento DateTime
+  precioUnitario   Decimal   @db.Decimal(12, 2)
 
-  compra   Compra   @relation(fields: [compraId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
-  recepciones RecepcionCompra[]
+  // Compatibilidad con órdenes antiguas.
+  // Las órdenes nuevas no registrarán estos datos aquí.
+  numeroLote       String?
+  fechaVencimiento DateTime?
+
+  compra           Compra             @relation(fields: [compraId], references: [id])
+  producto         Producto           @relation(fields: [productoId], references: [id])
+  recepciones      RecepcionCompra[]
 }
+
 
 model Lote {
   id                 Int      @id @default(autoincrement())
