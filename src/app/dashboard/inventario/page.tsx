@@ -7,12 +7,14 @@ import {
     History,
     Package,
     PackageX,
+    Scale,
 } from "lucide-react";
 
 import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
-import { ROLES_CONSULTA_INVENTARIO } from "@/lib/permisos";
+import { ROLES_AJUSTE_INVENTARIO, ROLES_CONSULTA_INVENTARIO } from "@/lib/permisos";
+import { AjusteDialog } from "./ajuste-dialog";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import {
@@ -44,7 +46,13 @@ export default async function InventarioPage({
         categoriaId?: string;
     }>;
 }) {
-    await exigirRol(ROLES_CONSULTA_INVENTARIO);
+    const usuario = await exigirRol(
+        ROLES_CONSULTA_INVENTARIO
+    );
+
+    const puedeAjustar = ROLES_AJUSTE_INVENTARIO.includes(
+        usuario.rol
+    );
 
 
     const filtros = await searchParams;
@@ -62,9 +70,22 @@ export default async function InventarioPage({
         select: { id: true, nombre: true }, orderBy: { nombre: "asc" },
     });
 
-    // Solo productos con al menos un lote respaldado por una compra RECIBIDO.
-    // stockActual se conserva para conciliación, NO como cifra operativa.
     const productos = await consultarInventarioRespaldado();
+    const opcionesAjuste = productos
+        .filter((producto) => producto.estado)
+        .map((producto) => ({
+            id: producto.id,
+            codigo: producto.codigo,
+            nombre: producto.nombre,
+            lotes: producto.lotes.map((lote) => ({
+                id: lote.id,
+                numeroLote: lote.numeroLote,
+                cantidadDisponible: lote.cantidadDisponible,
+                cantidadInicial: lote.cantidadInicial,
+                fechaVencimiento: lote.fechaVencimiento.toISOString(),
+            })),
+        }))
+        .filter((producto) => producto.lotes.length > 0);
     const activos = productos.filter((p) => p.estado);
     const productosConStock = activos.filter((p) => p.stockLotes > 0).length;
     const stockBajo = activos.filter((p) =>
@@ -98,12 +119,17 @@ export default async function InventarioPage({
                         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                             Inventario y Stock
                         </h1>
+
                         <p className="mt-1.5 text-sm text-muted-foreground">
                             Existencias respaldadas por compras recibidas y lotes identificados.
                         </p>
                     </div>
 
-
+                    {puedeAjustar && (
+                        <div className="shrink-0">
+                            <AjusteDialog productos={opcionesAjuste} />
+                        </div>
+                    )}
                 </div>
             </section>
 
@@ -152,17 +178,23 @@ export default async function InventarioPage({
                                 Existencias por lote y compra recibida. Los registros sin respaldo se consultan en Conciliación.
                             </p>
                         </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                                href="/dashboard/inventario/conciliacion"
+                                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-secondary hover:text-primary"
+                            >
+                                <Scale className="h-4 w-4 text-primary" />
+                                Conciliación
+                            </Link>
 
-                        <Link href="/dashboard/inventario/conciliacion" className="text-sm font-medium text-primary hover:underline">
-                            Conciliar stock y lotes
-                        </Link>
-                        <Link
-                            href="/dashboard/inventario/movimientos"
-                            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-                        >
-                            <History className="h-4 w-4" />
-                            Historial de movimientos
-                        </Link>
+                            <Link
+                                href="/dashboard/inventario/movimientos"
+                                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-secondary hover:text-primary"
+                            >
+                                <History className="h-4 w-4 text-primary" />
+                                Historial
+                            </Link>
+                        </div>
                     </div>
 
                     <FiltrosInventario q={q} estado={estado} categoriaId={categoriaId} categorias={categorias} />

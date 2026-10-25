@@ -6,7 +6,7 @@ import { exigirRol } from "@/lib/guard";
 import { ROLES_CONSULTA_INVENTARIO } from "@/lib/permisos";
 import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
 
-export default async function DetalleInventarioPage({params}: {params: Promise<{id:string}>}) {
+export default async function DetalleInventarioPage({ params }: { params: Promise<{ id: string }> }) {
   const usuario = await exigirRol(ROLES_CONSULTA_INVENTARIO);
   const permiteAjustar = ROLES_AJUSTE_INVENTARIO.includes(usuario.rol);
   const { id } = await params;
@@ -31,11 +31,11 @@ export default async function DetalleInventarioPage({params}: {params: Promise<{
           <thead className="bg-secondary/40"><tr><th className="p-4">Lote</th><th className="p-4">Vencimiento</th><th className="p-4 text-right">Inicial</th><th className="p-4 text-right">Disponible</th><th className="p-4">Compra / proveedor</th><th className="p-4">Ajuste</th></tr></thead>
           <tbody>{producto.lotes.map(lote => <tr className="border-t" key={lote.id}>
             <td className="p-4 font-medium">{lote.numeroLote}</td>
-            <td className="p-4">{lote.fechaVencimiento.toLocaleDateString("es-PE", {timeZone:"UTC"})}</td>
+            <td className="p-4">{lote.fechaVencimiento.toLocaleDateString("es-PE", { timeZone: "UTC" })}</td>
             <td className="p-4 text-right">{lote.cantidadInicial}</td>
             <td className="p-4 text-right font-semibold">{lote.cantidadDisponible}</td>
             <td className="p-4">{lote.compras.map((compra, index) => <div key={`${compra.compraId}-${index}`}>#{compra.compraId} · {compra.proveedor} · {compra.cantidadRecibida} recibidas · {compra.origen}</div>)}</td>
-            <td className="p-4 align-top min-w-64">{permiteAjustar ? <AjusteLote loteId={lote.id} disponible={lote.cantidadDisponible} /> : "Solo consulta"}</td>
+            <td className="p-4 align-top min-w-64">{permiteAjustar ? <AjusteLote lote={{ id: lote.id,numeroLote: lote.numeroLote, cantidadDisponible: lote.cantidadDisponible, cantidadInicial: lote.cantidadInicial, fechaVencimiento: lote.fechaVencimiento.toISOString(),}} /> : "Solo consulta"}</td>
           </tr>)}</tbody>
         </table>
       </div>
