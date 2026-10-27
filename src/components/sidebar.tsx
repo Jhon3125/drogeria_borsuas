@@ -34,6 +34,7 @@ import {
     Users,
     UsersRound,
     Wallet,
+    ClipboardCheck,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -66,6 +67,8 @@ const ICONOS: Record<IconoNav, IconoComponente> = {
     "package-search": PackageSearch,
     "users-round": UsersRound,
     "file-text": FileText,
+    wallet: Wallet,
+    "clipboard-check": ClipboardCheck,
 };
 
 const ICONOS_FUTUROS: Record<
@@ -97,6 +100,11 @@ const COMERCIALES_PLEGABLES = new Set([
     "/dashboard/clientes",
     "/dashboard/cotizaciones",
     "/dashboard/ventas",
+]);
+
+const FINANZAS_HABILITADAS = new Set([
+    "/dashboard/ordenes-pago",
+    "/dashboard/ordenes-pago/conciliacion",
 ]);
 
 const GRUPOS_FUTUROS: {
@@ -153,10 +161,15 @@ export function Sidebar({
         COMERCIALES_PLEGABLES.has(item.href)
     );
 
+    const finanzas = items.filter((item) =>
+        FINANZAS_HABILITADAS.has(item.href)
+    );
+
     const principales = items.filter(
         (item) =>
             item.grupo === "principal" &&
-            !COMERCIALES_PLEGABLES.has(item.href)
+            !COMERCIALES_PLEGABLES.has(item.href) &&
+            !FINANZAS_HABILITADAS.has(item.href)
     );
 
     const administracion = items.filter(
@@ -169,8 +182,15 @@ export function Sidebar({
         const activo =
             item.href === "/dashboard"
                 ? pathname === "/dashboard"
-                : pathname === item.href ||
-                pathname.startsWith(`${item.href}/`);
+                : item.href === "/dashboard/ordenes-pago"
+                    ? pathname === "/dashboard/ordenes-pago" ||
+                    (
+                        /^\/dashboard\/ordenes-pago\/\d+(?:\/.*)?$/.test(
+                            pathname
+                        )
+                    )
+                    : pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
 
         return (
             <Link
@@ -272,6 +292,19 @@ export function Sidebar({
 
                         <div className="space-y-1">
                             {administracion.map(renderItem)}
+                        </div>
+                    </section>
+                )}
+
+                {/* Finanzas */}
+                {finanzas.length > 0 && (
+                    <section>
+                        <TituloGrupo>
+                            Finanzas
+                        </TituloGrupo>
+
+                        <div className="space-y-1">
+                            {finanzas.map(renderItem)}
                         </div>
                     </section>
                 )}

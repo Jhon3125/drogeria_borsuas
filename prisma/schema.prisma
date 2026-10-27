@@ -405,9 +405,10 @@ model OrdenPago {
 }
 
 model DesembolsoPago {
-  id            Int @id @default(autoincrement())
-  ordenPagoId   Int
-  responsableId Int
+  id                Int     @id @default(autoincrement())
+  ordenPagoId       Int
+  responsableId     Int
+  claveIdempotencia String? @unique @db.VarChar(36)
 
   monto         Decimal          @db.Decimal(12, 2)
   metodo        MetodoDesembolso
