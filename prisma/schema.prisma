@@ -68,6 +68,28 @@ enum Moneda {
   USD
 }
 
+enum EstadoOrdenPago {
+  SOLICITADA
+  APROBADA
+  RECHAZADA
+  PAGO_PARCIAL
+  PAGADA
+}
+
+enum MetodoDesembolso {
+  TRANSFERENCIA
+  EFECTIVO
+  CHEQUE
+  OTRO
+}
+
+enum AccionHistorialOrdenPago {
+  CREACION
+  APROBACION
+  RECHAZO
+  REGISTRO_DESEMBOLSO
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -84,11 +106,15 @@ model Usuario {
   actualizadoEn    DateTime      @updatedAt
 
   // Relaciones
-  ventas                Venta[]                @relation("Vendedor")
-  hojasDeRuta           HojaRuta[]             @relation("Conductor")
-  gastos                Gasto[]                @relation("ResponsableGasto")
-  recepcionesCompra RecepcionCompra[] @relation("ResponsableRecepcion")
-  movimientosInventario MovimientoInventario[] @relation("ResponsableMovimiento")
+  ventas                 Venta[]                @relation("Vendedor")
+  hojasDeRuta            HojaRuta[]             @relation("Conductor")
+  gastos                 Gasto[]                @relation("ResponsableGasto")
+  recepcionesCompra      RecepcionCompra[]      @relation("ResponsableRecepcion")
+  movimientosInventario  MovimientoInventario[] @relation("ResponsableMovimiento")
+  ordenesPagoSolicitadas OrdenPago[]            @relation("OrdenPagoSolicitante")
+  ordenesPagoAutorizadas OrdenPago[]            @relation("OrdenPagoAutorizador")
+  desembolsosRegistrados DesembolsoPago[]       @relation("ResponsableDesembolso")
+  historialOrdenesPago   HistorialOrdenPago[]   @relation("ResponsableHistorialOrdenPago")
 }
 
 // ==========================================
@@ -141,42 +167,39 @@ model Proveedor {
   compras Compra[]
 }
 
-
 model Compra {
-  id                    Int       @id @default(autoincrement())
-  proveedorId           Int
-  fecha                 DateTime  @default(now())
-  fechaEntregaEstimada  DateTime?
-  observaciones         String?
-  importeTotal          Decimal   @db.Decimal(12, 2)
-  moneda                Moneda    @default(PEN)
-  tipoCambio            Decimal?  @db.Decimal(12, 6)
-  estado                String    @default("COMPLETADO")
+  id                   Int       @id @default(autoincrement())
+  proveedorId          Int
+  fecha                DateTime  @default(now())
+  fechaEntregaEstimada DateTime?
+  observaciones        String?
+  importeTotal         Decimal   @db.Decimal(12, 2)
+  moneda               Moneda    @default(PEN)
+  tipoCambio           Decimal?  @db.Decimal(12, 6)
+  estado               String    @default("COMPLETADO")
 
-  proveedor             Proveedor        @relation(fields: [proveedorId], references: [id])
-  detalles              DetalleCompra[]
-  recepciones           RecepcionCompra[]
+  proveedor   Proveedor         @relation(fields: [proveedorId], references: [id])
+  detalles    DetalleCompra[]
+  recepciones RecepcionCompra[]
+  ordenesPago OrdenPago[]
 }
 
-
-
 model DetalleCompra {
-  id               Int       @id @default(autoincrement())
-  compraId         Int
-  productoId       Int
-  cantidad         Int
-  precioUnitario   Decimal   @db.Decimal(12, 2)
+  id             Int     @id @default(autoincrement())
+  compraId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(12, 2)
 
   // Compatibilidad con órdenes antiguas.
   // Las órdenes nuevas no registrarán estos datos aquí.
   numeroLote       String?
   fechaVencimiento DateTime?
 
-  compra           Compra             @relation(fields: [compraId], references: [id])
-  producto         Producto           @relation(fields: [productoId], references: [id])
-  recepciones      RecepcionCompra[]
+  compra      Compra            @relation(fields: [compraId], references: [id])
+  producto    Producto          @relation(fields: [productoId], references: [id])
+  recepciones RecepcionCompra[]
 }
-
 
 model Lote {
   id                 Int      @id @default(autoincrement())
@@ -197,18 +220,18 @@ model Lote {
 /// Registra una cantidad recibida realmente, incluso en entregas parciales.
 /// Una compra antigua RECIBIDO no se migra a recepción ficticia.
 model RecepcionCompra {
-  id Int @id @default(autoincrement())
-  compraId Int
+  id              Int      @id @default(autoincrement())
+  compraId        Int
   detalleCompraId Int
-  loteId Int
-  usuarioId Int?
-  cantidad Int
-  fecha DateTime @default(now())
+  loteId          Int
+  usuarioId       Int?
+  cantidad        Int
+  fecha           DateTime @default(now())
 
-  compra Compra @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  compra        Compra        @relation(fields: [compraId], references: [id], onDelete: Restrict)
   detalleCompra DetalleCompra @relation(fields: [detalleCompraId], references: [id], onDelete: Restrict)
-  lote Lote @relation(fields: [loteId], references: [id], onDelete: Restrict)
-  usuario Usuario? @relation("ResponsableRecepcion", fields: [usuarioId], references: [id], onDelete: SetNull)
+  lote          Lote          @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  usuario       Usuario?      @relation("ResponsableRecepcion", fields: [usuarioId], references: [id], onDelete: SetNull)
 
   @@index([compraId])
   @@index([detalleCompraId])
@@ -343,4 +366,82 @@ model Despacho {
 
   hojaRuta HojaRuta @relation(fields: [hojaRutaId], references: [id])
   venta    Venta    @relation(fields: [ventaId], references: [id])
+}
+
+/// Solicitud y autorización de pago asociada a una Orden de Compra.
+/// El monto solicitado debe estar respaldado por recepciones reales.
+model OrdenPago {
+  id            Int             @id @default(autoincrement())
+  compraId      Int
+  solicitanteId Int
+  autorizadorId Int?
+  estado        EstadoOrdenPago @default(SOLICITADA)
+
+  montoSolicitado Decimal @db.Decimal(12, 2)
+  moneda          Moneda
+
+  numeroFactura String? @db.VarChar(100)
+  observaciones String? @db.Text
+  motivoRechazo String? @db.Text
+
+  fechaSolicitud     DateTime  @default(now())
+  fechaAutorizacion  DateTime?
+  fechaActualizacion DateTime  @updatedAt
+
+  compra Compra @relation(fields: [compraId], references: [id], onDelete: Restrict)
+
+  solicitante Usuario @relation("OrdenPagoSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+
+  autorizador Usuario? @relation("OrdenPagoAutorizador", fields: [autorizadorId], references: [id], onDelete: Restrict)
+
+  desembolsos DesembolsoPago[]
+  historial   HistorialOrdenPago[]
+
+  @@index([compraId])
+  @@index([estado])
+  @@index([fechaSolicitud])
+  @@index([solicitanteId])
+  @@index([autorizadorId])
+}
+
+model DesembolsoPago {
+  id            Int @id @default(autoincrement())
+  ordenPagoId   Int
+  responsableId Int
+
+  monto         Decimal          @db.Decimal(12, 2)
+  metodo        MetodoDesembolso
+  referencia    String?          @db.VarChar(150)
+  observaciones String?          @db.Text
+
+  fechaPago     DateTime
+  fechaRegistro DateTime @default(now())
+
+  ordenPago OrdenPago @relation(fields: [ordenPagoId], references: [id], onDelete: Restrict)
+
+  responsable Usuario @relation("ResponsableDesembolso", fields: [responsableId], references: [id], onDelete: Restrict)
+
+  @@index([ordenPagoId])
+  @@index([responsableId])
+  @@index([fechaPago])
+}
+
+model HistorialOrdenPago {
+  id          Int @id @default(autoincrement())
+  ordenPagoId Int
+  usuarioId   Int
+
+  accion         AccionHistorialOrdenPago
+  estadoAnterior EstadoOrdenPago?
+  estadoNuevo    EstadoOrdenPago
+
+  descripcion String?  @db.Text
+  fecha       DateTime @default(now())
+
+  ordenPago OrdenPago @relation(fields: [ordenPagoId], references: [id], onDelete: Restrict)
+
+  usuario Usuario @relation("ResponsableHistorialOrdenPago", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([ordenPagoId, fecha])
+  @@index([usuarioId])
 }
