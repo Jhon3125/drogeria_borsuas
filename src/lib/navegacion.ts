@@ -10,7 +10,9 @@ export type IconoNav =
     | "shopping-cart"
     | "package-search"
     | "users-round"
-    | "file-text"; 
+    | "file-text"
+    | "wallet"
+    | "clipboard-check";
 
 export type GrupoNav = "principal" | "administracion";
 
@@ -60,9 +62,23 @@ export const NAVEGACION: ItemNav[] = [
         icono: "boxes",
         grupo: "principal",
     },
-    { titulo: "Proveedores", href: "/dashboard/proveedores", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "building", grupo: "principal" },
-    { titulo: "Compras", href: "/dashboard/compras", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "shopping-cart", grupo: "principal" },
-    { titulo: "Lotes y vencimientos", href: "/dashboard/lotes", roles: ["SUPER_ADMIN","ADMIN","COMPRAS","ALMACEN"], icono: "package-search", grupo: "principal" },
+    { titulo: "Proveedores", href: "/dashboard/proveedores", roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "ALMACEN"], icono: "building", grupo: "principal" },
+    { titulo: "Compras", href: "/dashboard/compras", roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "ALMACEN"], icono: "shopping-cart", grupo: "principal" },
+    { titulo: "Lotes y vencimientos", href: "/dashboard/lotes", roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS", "ALMACEN"], icono: "package-search", grupo: "principal" },
+    {
+        titulo: "Órdenes de Pago",
+        href: "/dashboard/ordenes-pago",
+        roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS"],
+        icono: "wallet",
+        grupo: "principal",
+    },
+    {
+        titulo: "Conciliación financiera",
+        href: "/dashboard/ordenes-pago/conciliacion",
+        roles: ["SUPER_ADMIN", "ADMIN", "COMPRAS"],
+        icono: "clipboard-check",
+        grupo: "principal",
+    },
     { titulo: "Clientes", href: "/dashboard/clientes", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "users-round", grupo: "principal" },
     { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "principal" },
     { titulo: "Ventas y CRM", href: "/dashboard/ventas", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "shopping-cart", grupo: "principal" },

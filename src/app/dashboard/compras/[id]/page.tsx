@@ -20,6 +20,16 @@ import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ROLES_COMPRAS_LECTURA } from "@/lib/compras-roles";
 
+import { Prisma } from "@/generated/prisma/client";
+import { ResumenFinancieroCompra } from "../resumen-financiero";
+import {
+    ROLES_OP_LECTURA,
+    ROLES_OP_SOLICITUD,
+} from "@/lib/ordenes-pago/roles";
+import {
+    calcularSaldoOrdenCompra,
+} from "@/lib/ordenes-pago/saldos";
+
 import {
     Table,
     TableBody,
@@ -90,6 +100,10 @@ export default async function OrdenCompraDetallePage({
 
     const puedeRecepcionar = ROLES_RECEPCION.includes(usuario.rol);
 
+    const puedeVerFinanzas = ROLES_OP_LECTURA.includes(usuario.rol);
+
+    const puedeSolicitarOP = ROLES_OP_SOLICITUD.includes(usuario.rol);
+
     const { id } = await params;
     const compraId = Number(id);
 
@@ -140,6 +154,36 @@ export default async function OrdenCompraDetallePage({
     });
 
     if (!compra) notFound();
+
+
+    const ordenesPago = puedeVerFinanzas
+        ? await prisma.ordenPago.findMany({
+            where: {
+                compraId: compra.id,
+            },
+            orderBy: [
+                { fechaSolicitud: "desc" },
+                { id: "desc" },
+            ],
+            select: {
+                id: true,
+                estado: true,
+                fechaSolicitud: true,
+                montoSolicitado: true,
+                solicitante: {
+                    select: {
+                        nombre: true,
+                    },
+                },
+                desembolsos: {
+                    select: {
+                        monto: true,
+                    },
+                },
+            },
+        })
+        : [];
+
 
     const detalles = compra.detalles.map((detalle) => {
         const recibido = detalle.recepciones.reduce(
@@ -206,6 +250,45 @@ export default async function OrdenCompraDetallePage({
     );
 
     const simbolo = monedaTexto(compra.moneda);
+
+
+    const saldoFinanciero = puedeVerFinanzas
+        ? calcularSaldoOrdenCompra(
+            compra.detalles,
+            ordenesPago.map((orden) => ({
+                estado: orden.estado,
+                montoSolicitado: orden.montoSolicitado,
+            }))
+        )
+        : null;
+
+    const totalDesembolsado = ordenesPago.reduce(
+        (total, orden) =>
+            total.add(
+                orden.desembolsos.reduce(
+                    (subtotal, desembolso) =>
+                        subtotal.add(desembolso.monto),
+                    new Prisma.Decimal(0)
+                )
+            ),
+        new Prisma.Decimal(0)
+    );
+
+    const ordenesPagoResumen = ordenesPago.map((orden) => ({
+        id: orden.id,
+        estado: orden.estado,
+        fechaSolicitud: orden.fechaSolicitud,
+        solicitante: orden.solicitante.nombre,
+        montoSolicitado: orden.montoSolicitado.toFixed(2),
+        montoPagado: orden.desembolsos
+            .reduce(
+                (total, desembolso) =>
+                    total.add(desembolso.monto),
+                new Prisma.Decimal(0)
+            )
+            .toFixed(2),
+    }));
+
 
     return (
         <div className="mx-auto max-w-7xl space-y-7 pb-8">
@@ -455,6 +538,24 @@ export default async function OrdenCompraDetallePage({
                     </Table>
                 </div>
             </section>
+
+            {/* Integración financiera de la Orden de Compra */}
+            {puedeVerFinanzas && saldoFinanciero && (
+                <ResumenFinancieroCompra
+                    compraId={compra.id}
+                    moneda={compra.moneda}
+                    valorRecibido={
+                        saldoFinanciero.valorRecibido.toFixed(2)
+                    }
+                    montoComprometido={
+                        saldoFinanciero.montoComprometido.toFixed(2)
+                    }
+                    montoPagado={totalDesembolsado.toFixed(2)}
+                    disponible={saldoFinanciero.disponible.toFixed(2)}
+                    ordenes={ordenesPagoResumen}
+                    puedeSolicitar={puedeSolicitarOP}
+                />
+            )}
 
             {/* Recepción: próximo incremento */}
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-5 shadow-xs">
