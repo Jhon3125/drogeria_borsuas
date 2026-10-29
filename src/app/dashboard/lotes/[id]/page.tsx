@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ROLES_COMPRAS_LECTURA } from "@/lib/compras-roles";
 import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
+import { EstadoCalidadForm } from "../estado-calidad-form";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -63,7 +64,12 @@ function diasVencimiento(fecha: Date) {
 export default async function DetalleLotePage({
     params,
 }: Props) {
-    await exigirRol(ROLES_COMPRAS_LECTURA);
+    const usuario = await exigirRol(ROLES_COMPRAS_LECTURA);
+
+    const puedeGestionarCalidad = [
+        "SUPER_ADMIN",
+        "ADMIN",
+    ].includes(usuario.rol);
 
     const { id } = await params;
     const loteId = Number(id);
@@ -120,6 +126,17 @@ export default async function DetalleLotePage({
                 },
             },
             movimientos: {
+                orderBy: [
+                    { fecha: "desc" },
+                    { id: "desc" },
+                ],
+                include: {
+                    usuario: {
+                        select: { nombre: true },
+                    },
+                },
+            },
+            historialCalidad: {
                 orderBy: [
                     { fecha: "desc" },
                     { id: "desc" },
@@ -303,6 +320,65 @@ export default async function DetalleLotePage({
                         </p>
                     </div>
                 </div>
+            </section>
+
+            <section className="rounded-xl border bg-card p-5">
+                <h2 className="font-semibold">
+                    Condición de calidad
+                </h2>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="rounded-full bg-secondary px-3 py-1 text-sm font-semibold">
+                        {lote.estadoCalidad}
+                    </span>
+
+                    <p className="text-sm text-muted-foreground">
+                        {lote.estadoCalidad === "DISPONIBLE"
+                            ? "Liberado administrativamente, sujeto a vencimiento."
+                            : "No apto para operaciones comerciales."}
+                    </p>
+                </div>
+
+                {puedeGestionarCalidad && (
+                    <div className="mt-5">
+                        <EstadoCalidadForm
+                            loteId={lote.id}
+                            estadoActual={lote.estadoCalidad}
+                        />
+                    </div>
+                )}
+            </section>
+
+            <section className="overflow-hidden rounded-xl border bg-card">
+                <div className="border-b px-6 py-5">
+                    <h2 className="font-semibold">
+                        Historial de calidad
+                    </h2>
+                </div>
+
+                {lote.historialCalidad.length === 0 ? (
+                    <p className="p-6 text-sm text-muted-foreground">
+                        No se han registrado cambios de calidad.
+                        El estado inicial proviene de la configuración del sistema.
+                    </p>
+                ) : (
+                    <div className="divide-y">
+                        {lote.historialCalidad.map((evento) => (
+                            <div key={evento.id} className="px-6 py-4">
+                                <p className="text-sm font-semibold">
+                                    {evento.estadoAnterior} → {evento.estadoNuevo}
+                                </p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {evento.motivo}
+                                </p>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    {evento.usuario.nombre} ·{" "}
+                                    {fechaPeru(evento.fecha)}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
 
             <section className="overflow-hidden rounded-xl border bg-card">
