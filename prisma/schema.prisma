@@ -90,6 +90,16 @@ enum AccionHistorialOrdenPago {
   REGISTRO_DESEMBOLSO
 }
 
+enum EstadoCalidadLote {
+  DISPONIBLE
+  CUARENTENA
+  BLOQUEADO
+}
+
+enum AccionCalidadLote {
+  CAMBIO_ESTADO
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -115,6 +125,7 @@ model Usuario {
   ordenesPagoAutorizadas OrdenPago[]            @relation("OrdenPagoAutorizador")
   desembolsosRegistrados DesembolsoPago[]       @relation("ResponsableDesembolso")
   historialOrdenesPago   HistorialOrdenPago[]   @relation("ResponsableHistorialOrdenPago")
+  historialCalidadLotes  HistorialCalidadLote[] @relation("ResponsableCalidadLote")
 }
 
 // ==========================================
@@ -210,9 +221,11 @@ model Lote {
   fechaIngreso       DateTime @default(now())
   fechaVencimiento   DateTime
 
-  producto    Producto               @relation(fields: [productoId], references: [id])
-  movimientos MovimientoInventario[]
-  recepciones RecepcionCompra[]
+  producto         Producto               @relation(fields: [productoId], references: [id])
+  estadoCalidad    EstadoCalidadLote      @default(DISPONIBLE)
+  historialCalidad HistorialCalidadLote[]
+  movimientos      MovimientoInventario[]
+  recepciones      RecepcionCompra[]
 
   @@unique([numeroLote, productoId])
 }
@@ -255,6 +268,23 @@ model MovimientoInventario {
 
   @@index([usuarioId])
   @@index([fecha])
+}
+
+model HistorialCalidadLote {
+  id             Int               @id @default(autoincrement())
+  loteId         Int
+  usuarioId      Int
+  accion         AccionCalidadLote @default(CAMBIO_ESTADO)
+  estadoAnterior EstadoCalidadLote
+  estadoNuevo    EstadoCalidadLote
+  motivo         String            @db.VarChar(500)
+  fecha          DateTime          @default(now())
+
+  lote    Lote    @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation("ResponsableCalidadLote", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([loteId, fecha])
+  @@index([usuarioId])
 }
 
 // ==========================================

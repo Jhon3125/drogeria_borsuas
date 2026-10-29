@@ -27,6 +27,7 @@ function dinero(moneda: string, importe: Prisma.Decimal) {
 export default async function ConciliacionFinancieraPage() {
     await exigirRol(ROLES_OP_LECTURA);
 
+
     const ordenes = await prisma.ordenPago.findMany({
         orderBy: { id: "desc" },
         select: {
@@ -35,13 +36,39 @@ export default async function ConciliacionFinancieraPage() {
             moneda: true,
             estado: true,
             montoSolicitado: true,
+            fechaSolicitud: true,
+            motivoRechazo: true,
+            autorizadorId: true,
+            fechaAutorizacion: true,
+
             desembolsos: {
                 select: {
+                    id: true,
                     monto: true,
+                    metodo: true,
+                    referencia: true,
+                    claveIdempotencia: true,
+                    fechaRegistro: true,
                 },
+            },
+
+            historial: {
+                select: {
+                    id: true,
+                    accion: true,
+                    estadoAnterior: true,
+                    estadoNuevo: true,
+                    descripcion: true,
+                    fecha: true,
+                },
+                orderBy: [
+                    { fecha: "asc" },
+                    { id: "asc" },
+                ],
             },
         },
     });
+
 
     const compras = await prisma.compra.findMany({
         where: {
@@ -74,6 +101,28 @@ export default async function ConciliacionFinancieraPage() {
     const cero = () => new Prisma.Decimal(0);
     const incidencias: Incidencia[] = [];
 
+
+    type AdvertenciaAuditoria = {
+        clave: string;
+        ordenPagoId: number;
+        descripcion: string;
+    };
+
+    const advertencias: AdvertenciaAuditoria[] = [];
+
+    function registrarAdvertencia(
+        ordenPagoId: number,
+        clave: string,
+        descripcion: string
+    ) {
+        advertencias.push({
+            clave: `op-${ordenPagoId}-${clave}`,
+            ordenPagoId,
+            descripcion,
+        });
+    }
+
+
     const opPorCompra = new Map<
         number,
         typeof ordenes
@@ -84,6 +133,7 @@ export default async function ConciliacionFinancieraPage() {
         anteriores.push(orden);
         opPorCompra.set(orden.compraId, anteriores);
     }
+
 
     for (const orden of ordenes) {
         const pagado = orden.desembolsos.reduce(
@@ -147,6 +197,231 @@ export default async function ConciliacionFinancieraPage() {
                 agregar("Estado financiero no reconocido.");
         }
     }
+
+
+    // Auditoría del ciclo de vida de cada Orden de Pago
+    for (const orden of ordenes) {
+        const eventos = orden.historial;
+
+        const creaciones = eventos.filter(
+            (evento) => evento.accion === "CREACION"
+        );
+
+        const aprobaciones = eventos.filter(
+            (evento) => evento.accion === "APROBACION"
+        );
+
+        const rechazos = eventos.filter(
+            (evento) => evento.accion === "RECHAZO"
+        );
+
+        const eventosPago = eventos.filter(
+            (evento) =>
+                evento.accion === "REGISTRO_DESEMBOLSO"
+        );
+
+        function incidenciaAuditoria(
+            clave: string,
+            descripcion: string
+        ) {
+            incidencias.push({
+                clave: `op-${orden.id}-auditoria-${clave}`,
+                tipo: "OP",
+                id: orden.id,
+                descripcion,
+            });
+        }
+
+        // 1. Todas las OP creadas mediante el flujo actual
+        // deberían contar con un único evento de creación.
+        if (creaciones.length !== 1) {
+            incidenciaAuditoria(
+                "creacion",
+                `Se encontraron ${creaciones.length} eventos de creación; se esperaba uno.`
+            );
+        }
+
+        // 2. Validar consistencia de los eventos conocidos.
+        for (const evento of eventos) {
+            const estadoEsperado: Record<string, string> = {
+                CREACION: "SOLICITADA",
+                APROBACION: "APROBADA",
+                RECHAZO: "RECHAZADA",
+            };
+
+            const esperado = estadoEsperado[evento.accion];
+
+            if (
+                esperado &&
+                evento.estadoNuevo !== esperado
+            ) {
+                incidenciaAuditoria(
+                    `evento-${evento.id}`,
+                    `El evento #${evento.id} (${evento.accion}) registra un estado de destino incorrecto.`
+                );
+            }
+
+            if (
+                evento.accion === "REGISTRO_DESEMBOLSO" &&
+                !["PAGO_PARCIAL", "PAGADA"].includes(
+                    evento.estadoNuevo
+                )
+            ) {
+                incidenciaAuditoria(
+                    `pago-estado-${evento.id}`,
+                    `El evento de desembolso #${evento.id} no termina en un estado de pago válido.`
+                );
+            }
+        }
+
+        // 3. El historial de aprobación debe concordar
+        // con la situación actual de la OP.
+        if (
+            ["APROBADA", "PAGO_PARCIAL", "PAGADA"].includes(
+                orden.estado
+            )
+        ) {
+            if (aprobaciones.length !== 1) {
+                incidenciaAuditoria(
+                    "aprobacion",
+                    "La OP está autorizada o pagada, pero no tiene exactamente un evento de aprobación."
+                );
+            }
+
+            if (
+                orden.autorizadorId === null ||
+                orden.fechaAutorizacion === null
+            ) {
+                incidenciaAuditoria(
+                    "datos-autorizacion",
+                    "Falta el responsable o la fecha de autorización."
+                );
+            }
+        }
+
+        // 4. Una solicitud rechazada debe conservar
+        // el motivo y su evento de rechazo.
+        if (orden.estado === "RECHAZADA") {
+            if (!orden.motivoRechazo?.trim()) {
+                incidenciaAuditoria(
+                    "motivo-rechazo",
+                    "La OP está rechazada, pero no tiene motivo registrado."
+                );
+            }
+
+            if (rechazos.length !== 1) {
+                incidenciaAuditoria(
+                    "evento-rechazo",
+                    "La OP rechazada no tiene exactamente un evento de rechazo."
+                );
+            }
+        }
+
+        if (rechazos.length > 0 && orden.estado !== "RECHAZADA") {
+            incidenciaAuditoria(
+                "rechazo-inconsistente",
+                "Existe un evento de rechazo, pero la OP no está rechazada."
+            );
+        }
+
+        // 5. En el flujo actual, cada desembolso genera
+        // exactamente un evento de historial.
+        if (eventosPago.length !== orden.desembolsos.length) {
+            incidenciaAuditoria(
+                "cantidad-eventos-pago",
+                `Existen ${orden.desembolsos.length} desembolsos, pero ${eventosPago.length} eventos de pago.`
+            );
+        }
+
+        // 6. Correlacionar los pagos con los eventos usando
+        // el identificador incluido en la descripción.
+        for (const pago of orden.desembolsos) {
+            const prefijo = `Desembolso #${pago.id}:`;
+
+            const coincidencias = eventosPago.filter(
+                (evento) =>
+                    evento.descripcion?.startsWith(prefijo)
+            );
+
+            if (coincidencias.length !== 1) {
+                registrarAdvertencia(
+                    orden.id,
+                    `trazabilidad-${pago.id}`,
+                    `No se pudo vincular de forma inequívoca el desembolso #${pago.id} con su evento de historial.`
+                );
+            }
+
+            // Los registros anteriores a la incorporación
+            // del UUID pueden tener este campo en NULL.
+            if (!pago.claveIdempotencia) {
+                registrarAdvertencia(
+                    orden.id,
+                    `sin-uuid-${pago.id}`,
+                    `El desembolso #${pago.id} no tiene clave de idempotencia. Puede corresponder a un registro histórico.`
+                );
+            }
+        }
+    }
+
+
+    // Revisión de referencias repetidas de transferencias
+    const referencias = new Map<
+        string,
+        { ordenPagoId: number; desembolsoId: number }[]
+    >();
+
+    for (const orden of ordenes) {
+        for (const pago of orden.desembolsos) {
+            if (
+                pago.metodo !== "TRANSFERENCIA" ||
+                !pago.referencia?.trim()
+            ) {
+                continue;
+            }
+
+            const referencia = pago.referencia
+                .trim()
+                .toUpperCase();
+
+            // Incluimos la moneda como contexto, pero no
+            // asumimos que sea un identificador bancario único.
+            const clave = `${orden.moneda}:${referencia}`;
+
+            const registros = referencias.get(clave) ?? [];
+
+            registros.push({
+                ordenPagoId: orden.id,
+                desembolsoId: pago.id,
+            });
+
+            referencias.set(clave, registros);
+        }
+    }
+
+    for (const [clave, registros] of referencias) {
+        if (registros.length <= 1) continue;
+
+        const ordenesInvolucradas = [
+            ...new Set(registros.map((r) => r.ordenPagoId)),
+        ];
+
+        const descripcion =
+            `Referencia de transferencia "${clave}" ` +
+            `utilizada en ${registros.length} desembolsos. ` +
+            `Revisar su correspondencia con los movimientos bancarios.`;
+
+        for (const ordenPagoId of ordenesInvolucradas) {
+            registrarAdvertencia(
+                ordenPagoId,
+                `referencia-${registros
+                    .filter((r) => r.ordenPagoId === ordenPagoId)
+                    .map((r) => r.desembolsoId)
+                    .join("-")}`,
+                descripcion
+            );
+        }
+    }
+
 
     for (const compra of compras) {
         const ordenesCompra = opPorCompra.get(compra.id) ?? [];
@@ -301,8 +576,8 @@ export default async function ConciliacionFinancieraPage() {
                     </p>
                     <p
                         className={`mt-3 text-3xl font-bold ${sinIncidencias
-                                ? "text-emerald-700"
-                                : "text-red-700"
+                            ? "text-emerald-700"
+                            : "text-red-700"
                             }`}
                     >
                         {incidencias.length}
@@ -382,6 +657,67 @@ export default async function ConciliacionFinancieraPage() {
                     </div>
                 )}
             </section>
+
+
+            <section className="overflow-hidden rounded-xl border bg-card">
+                <div className="flex items-center gap-3 border-b px-6 py-5">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+
+                    <div>
+                        <h2 className="font-semibold">
+                            Advertencias de auditoría
+                        </h2>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {advertencias.length} observaciones que pueden
+                            requerir revisión manual.
+                        </p>
+                    </div>
+                </div>
+
+                {advertencias.length === 0 ? (
+                    <div className="flex items-center gap-3 px-6 py-8">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <p className="text-sm text-muted-foreground">
+                            No se encontraron advertencias adicionales.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="divide-y">
+                        {advertencias.map((advertencia) => (
+                            <div
+                                key={advertencia.clave}
+                                className="flex flex-wrap items-start justify-between gap-4 px-6 py-4"
+                            >
+                                <div className="flex gap-3">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+
+                                    <div>
+                                        <p className="text-sm font-semibold">
+                                            OP-
+                                            {String(
+                                                advertencia.ordenPagoId
+                                            ).padStart(4, "0")}
+                                        </p>
+
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {advertencia.descripcion}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <Link
+                                    href={`/dashboard/ordenes-pago/${advertencia.ordenPagoId}`}
+                                    className="text-sm font-medium text-primary hover:underline"
+                                >
+                                    Ver Orden de Pago
+                                </Link>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+
 
             <p className="text-xs leading-5 text-muted-foreground">
                 La conciliación utiliza los importes almacenados
