@@ -90,6 +90,21 @@ enum AccionHistorialOrdenPago {
   REGISTRO_DESEMBOLSO
 }
 
+enum EstadoCalidadLote {
+  DISPONIBLE
+  CUARENTENA
+  BLOQUEADO
+}
+
+enum AccionCalidadLote {
+  CAMBIO_ESTADO
+}
+
+enum EstadoRetencionLote {
+  ACTIVA
+  LIBERADA
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -115,6 +130,9 @@ model Usuario {
   ordenesPagoAutorizadas OrdenPago[]            @relation("OrdenPagoAutorizador")
   desembolsosRegistrados DesembolsoPago[]       @relation("ResponsableDesembolso")
   historialOrdenesPago   HistorialOrdenPago[]   @relation("ResponsableHistorialOrdenPago")
+  historialCalidadLotes  HistorialCalidadLote[] @relation("ResponsableCalidadLote")
+  retencionesRegistradas RetencionLote[]        @relation("RetencionRegistradaPor")
+  retencionesLiberadas   RetencionLote[]        @relation("RetencionLiberadaPor")
 }
 
 // ==========================================
@@ -210,9 +228,12 @@ model Lote {
   fechaIngreso       DateTime @default(now())
   fechaVencimiento   DateTime
 
-  producto    Producto               @relation(fields: [productoId], references: [id])
-  movimientos MovimientoInventario[]
-  recepciones RecepcionCompra[]
+  producto         Producto               @relation(fields: [productoId], references: [id])
+  estadoCalidad    EstadoCalidadLote      @default(DISPONIBLE)
+  historialCalidad HistorialCalidadLote[]
+  movimientos      MovimientoInventario[]
+  recepciones      RecepcionCompra[]
+  retenciones      RetencionLote[]
 
   @@unique([numeroLote, productoId])
 }
@@ -255,6 +276,43 @@ model MovimientoInventario {
 
   @@index([usuarioId])
   @@index([fecha])
+}
+
+model HistorialCalidadLote {
+  id             Int               @id @default(autoincrement())
+  loteId         Int
+  usuarioId      Int
+  accion         AccionCalidadLote @default(CAMBIO_ESTADO)
+  estadoAnterior EstadoCalidadLote
+  estadoNuevo    EstadoCalidadLote
+  motivo         String            @db.VarChar(500)
+  fecha          DateTime          @default(now())
+
+  lote    Lote    @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation("ResponsableCalidadLote", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([loteId, fecha])
+  @@index([usuarioId])
+}
+
+model RetencionLote {
+  id               Int                 @id @default(autoincrement())
+  loteId           Int
+  cantidad         Int
+  motivo           String              @db.VarChar(500)
+  estado           EstadoRetencionLote @default(ACTIVA)
+  registradoPorId  Int
+  fechaRegistro    DateTime            @default(now())
+  liberadoPorId    Int?
+  fechaLiberacion  DateTime?
+  motivoLiberacion String?             @db.VarChar(500)
+
+  lote          Lote     @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  registradoPor Usuario  @relation("RetencionRegistradaPor", fields: [registradoPorId], references: [id], onDelete: Restrict)
+  liberadoPor   Usuario? @relation("RetencionLiberadaPor", fields: [liberadoPorId], references: [id], onDelete: Restrict)
+
+  @@index([loteId, estado])
+  @@index([fechaRegistro])
 }
 
 // ==========================================

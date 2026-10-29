@@ -18,6 +18,7 @@ import {
     Truck,
     Users,
     Wallet,
+    ClipboardCheck,
     type LucideIcon,
 } from "lucide-react";
 
@@ -43,6 +44,8 @@ const ICONOS: Record<IconoNav, LucideIcon> = {
     "package-search": PackageSearch,
     "users-round": Users,
     "file-text": FileText,
+    wallet: Wallet,
+    "clipboard-check": ClipboardCheck,
 };
 
 const DESCRIPCIONES: Record<string, string> = {
@@ -380,18 +383,18 @@ export default async function DashboardPage() {
             {NAVEGACION.some(
                 (item) => item.href === "/dashboard/inventario" && item.roles.includes(rol)
             ) && (
-                <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold">Inventario y stock</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Consulta existencias por lotes recibidos, stock mínimo y conciliación.
-                        </p>
-                    </div>
-                    <Link href="/dashboard/inventario" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#123E70] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e3157]">
-                        Ver inventario <ArrowRight className="h-4 w-4" />
-                    </Link>
-                </section>
-            )}
+                    <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">Inventario y stock</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Consulta existencias por lotes recibidos, stock mínimo y conciliación.
+                            </p>
+                        </div>
+                        <Link href="/dashboard/inventario" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#123E70] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e3157]">
+                            Ver inventario <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    </section>
+                )}
 
             {/* Ventas */}
             {puedeVerVentas && (
