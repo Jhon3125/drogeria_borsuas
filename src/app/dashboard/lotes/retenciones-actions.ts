@@ -61,8 +61,9 @@ async function bloquearLote(
     tx: Prisma.TransactionClient,
     loteId: number
 ) {
-    await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(847202, ${loteId})
+    await tx.$queryRaw<{ adquirido: number }[]>`
+        SELECT 1::integer AS adquirido
+        FROM pg_advisory_xact_lock(847202, ${loteId})
     `;
 }
 

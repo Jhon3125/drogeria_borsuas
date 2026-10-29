@@ -16,6 +16,7 @@ import { exigirRol } from "@/lib/guard";
 import { ROLES_COMPRAS_LECTURA } from "@/lib/compras-roles";
 import { consultarInventarioRespaldado } from "@/lib/inventario/lotes-respaldados";
 import { EstadoCalidadForm } from "../estado-calidad-form";
+import { RetencionesPanel } from "../retenciones-panel";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -143,6 +144,20 @@ export default async function DetalleLotePage({
                 ],
                 include: {
                     usuario: {
+                        select: { nombre: true },
+                    },
+                },
+            },
+            retenciones: {
+                orderBy: [
+                    { fechaRegistro: "desc" },
+                    { id: "desc" },
+                ],
+                include: {
+                    registradoPor: {
+                        select: { nombre: true },
+                    },
+                    liberadoPor: {
                         select: { nombre: true },
                     },
                 },
@@ -380,6 +395,25 @@ export default async function DetalleLotePage({
                     </div>
                 )}
             </section>
+
+            <RetencionesPanel
+                loteId={lote.id}
+                stockFisico={lote.cantidadDisponible}
+                puedeGestionar={puedeGestionarCalidad}
+                retenciones={lote.retenciones.map((retencion) => ({
+                    id: retencion.id,
+                    cantidad: retencion.cantidad,
+                    motivo: retencion.motivo,
+                    estado: retencion.estado,
+                    fechaRegistro: retencion.fechaRegistro.toISOString(),
+                    registradoPor: retencion.registradoPor.nombre,
+                    fechaLiberacion:
+                        retencion.fechaLiberacion?.toISOString() ?? null,
+                    liberadoPor:
+                        retencion.liberadoPor?.nombre ?? null,
+                    motivoLiberacion: retencion.motivoLiberacion,
+                }))}
+            />
 
             <section className="overflow-hidden rounded-xl border bg-card">
                 <div className="flex items-center gap-2 border-b px-6 py-5">

@@ -47,8 +47,12 @@ export async function consultarInventarioRespaldado() {
           cantidadInicial: true,
           cantidadDisponible: true,
 
-          // Nuevo campo de calidad.
           estadoCalidad: true,
+
+          retenciones: {
+            where: { estado: "ACTIVA" },
+            select: { cantidad: true },
+          },
 
           recepciones: {
             select: {
@@ -97,11 +101,23 @@ export async function consultarInventarioRespaldado() {
         return [];
       }
 
-      const { recepciones, ...datosLote } = lote;
+      const cantidadRetenida = lote.retenciones.reduce(
+        (total, retencion) => total + retencion.cantidad,
+        0
+      );
+
+      // Excluir también cualquier lote con retenciones
+      // inconsistentes respecto a sus existencias físicas.
+      if (cantidadRetenida > lote.cantidadDisponible) {
+        return [];
+      }
+
+      const { recepciones, retenciones, ...datosLote } = lote;
 
       return [
         {
           ...datosLote,
+          cantidadRetenida,
           compras: recepciones.map((recepcion) => ({
             compraId: recepcion.compraId,
             proveedor:
@@ -121,22 +137,23 @@ export async function consultarInventarioRespaldado() {
     );
 
     // 4. Stock apto para venta.
-    const stockAptoVenta = lotes.reduce(
-      (total, lote) => {
-        const vencimientoISO = lote.fechaVencimiento
-          .toISOString()
-          .slice(0, 10);
+    const stockAptoVenta = lotes.reduce((total, lote) => {
+      const vencimientoISO = lote.fechaVencimiento
+        .toISOString()
+        .slice(0, 10);
 
-        const apto =
-          lote.estadoCalidad === "DISPONIBLE" &&
-          vencimientoISO >= hoyISO;
+      const apto =
+        producto.estado &&
+        lote.estadoCalidad === "DISPONIBLE" &&
+        vencimientoISO >= hoyISO;
 
-        return total + (
-          apto ? lote.cantidadDisponible : 0
-        );
-      },
-      0
-    );
+      const unidadesLibres = Math.max(
+        0,
+        lote.cantidadDisponible - lote.cantidadRetenida
+      );
+
+      return total + (apto ? unidadesLibres : 0);
+    }, 0);
 
     // 5. Retornar información del producto.
     return {
