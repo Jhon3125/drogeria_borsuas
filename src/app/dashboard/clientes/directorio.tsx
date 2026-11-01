@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { Pencil, UserRoundPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { ClienteForm } from "./form";
 import { alternarCliente } from "./actions";
@@ -36,20 +38,6 @@ export function DirectorioClientes({ clientes }: Props) {
     cerrar();
     router.refresh();
   }, [cerrar, router]);
-
-  useEffect(() => {
-    if (!modalAbierto) return;
-    const anterior = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const alPresionar = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cerrar();
-    };
-    window.addEventListener("keydown", alPresionar);
-    return () => {
-      document.body.style.overflow = anterior;
-      window.removeEventListener("keydown", alPresionar);
-    };
-  }, [modalAbierto, cerrar]);
 
   const activos = clientes.filter((c) => c.estado).length;
   const filtrados = useMemo(() => {
@@ -171,25 +159,40 @@ export function DirectorioClientes({ clientes }: Props) {
         {filtrados.length === 0 && <p className="p-10 text-center text-sm text-slate-500">No se encontraron clientes con esos filtros.</p>}
       </section>
 
-      {modalAbierto && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-[2px] sm:p-6"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) cerrar(); }}
-        >
-          <div role="dialog" aria-modal="true" aria-labelledby="titulo-modal-cliente" className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
-              <div>
-                <h2 id="titulo-modal-cliente" className="text-lg font-bold text-[#123E70]">{editar ? "Editar cliente" : "Nuevo cliente"}</h2>
-                <p className="mt-1 text-xs text-slate-500">{editar ? "Actualiza los datos del cliente." : "Registra un nuevo cliente en Borsuas."}</p>
-              </div>
-              <button type="button" aria-label="Cerrar modal" onClick={cerrar} className="rounded-lg px-2 py-1 text-xl text-slate-500 hover:bg-slate-200">×</button>
+      <Dialog
+        open={modalAbierto}
+        onOpenChange={(abierto) => {
+          if (!abierto) cerrar();
+          else setModalAbierto(true);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader className="space-y-3 pb-2">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-primary">
+              {editar ? <Pencil className="h-5 w-5" /> : <UserRoundPlus className="h-5 w-5" />}
             </div>
-            <div className="max-h-[calc(92vh-100px)] overflow-y-auto p-5">
-              <ClienteForm key={editar?.id ?? "nuevo"} cliente={editar ?? undefined} onCancelar={cerrar} onGuardado={guardado} />
+            <div className="space-y-1.5">
+              <DialogTitle className="text-xl">
+                {editar ? "Editar cliente" : "Nuevo cliente"}
+              </DialogTitle>
+              <DialogDescription>
+                {editar
+                  ? "Actualiza los datos generales y de contacto del cliente."
+                  : "Registra un nuevo cliente en la cartera comercial de Borsuas."}
+              </DialogDescription>
             </div>
-          </div>
-        </div>
-      )}
+          </DialogHeader>
+
+          {modalAbierto && (
+            <ClienteForm
+              key={editar?.id ?? "nuevo"}
+              cliente={editar ?? undefined}
+              onCancelar={cerrar}
+              onGuardado={guardado}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

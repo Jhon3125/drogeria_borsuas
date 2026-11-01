@@ -105,6 +105,15 @@ enum EstadoRetencionLote {
   LIBERADA
 }
 
+enum EtapaOportunidad {
+  PROSPECTO
+  CONTACTADO
+  COTIZACION
+  NEGOCIACION
+  GANADA
+  PERDIDA
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -121,18 +130,20 @@ model Usuario {
   actualizadoEn    DateTime      @updatedAt
 
   // Relaciones
-  ventas                 Venta[]                @relation("Vendedor")
-  hojasDeRuta            HojaRuta[]             @relation("Conductor")
-  gastos                 Gasto[]                @relation("ResponsableGasto")
-  recepcionesCompra      RecepcionCompra[]      @relation("ResponsableRecepcion")
-  movimientosInventario  MovimientoInventario[] @relation("ResponsableMovimiento")
-  ordenesPagoSolicitadas OrdenPago[]            @relation("OrdenPagoSolicitante")
-  ordenesPagoAutorizadas OrdenPago[]            @relation("OrdenPagoAutorizador")
-  desembolsosRegistrados DesembolsoPago[]       @relation("ResponsableDesembolso")
-  historialOrdenesPago   HistorialOrdenPago[]   @relation("ResponsableHistorialOrdenPago")
-  historialCalidadLotes  HistorialCalidadLote[] @relation("ResponsableCalidadLote")
-  retencionesRegistradas RetencionLote[]        @relation("RetencionRegistradaPor")
-  retencionesLiberadas   RetencionLote[]        @relation("RetencionLiberadaPor")
+  ventas                   Venta[]                @relation("Vendedor")
+  hojasDeRuta              HojaRuta[]             @relation("Conductor")
+  gastos                   Gasto[]                @relation("ResponsableGasto")
+  recepcionesCompra        RecepcionCompra[]      @relation("ResponsableRecepcion")
+  movimientosInventario    MovimientoInventario[] @relation("ResponsableMovimiento")
+  ordenesPagoSolicitadas   OrdenPago[]            @relation("OrdenPagoSolicitante")
+  ordenesPagoAutorizadas   OrdenPago[]            @relation("OrdenPagoAutorizador")
+  desembolsosRegistrados   DesembolsoPago[]       @relation("ResponsableDesembolso")
+  historialOrdenesPago     HistorialOrdenPago[]   @relation("ResponsableHistorialOrdenPago")
+  historialCalidadLotes    HistorialCalidadLote[] @relation("ResponsableCalidadLote")
+  retencionesRegistradas   RetencionLote[]        @relation("RetencionRegistradaPor")
+  retencionesLiberadas     RetencionLote[]        @relation("RetencionLiberadaPor")
+  oportunidadesComerciales OportunidadComercial[] @relation("ResponsableOportunidad")
+  historialOportunidades   HistorialOportunidad[] @relation("ResponsableHistorialOportunidad")
 }
 
 // ==========================================
@@ -328,7 +339,8 @@ model Cliente {
   direccion   String?
   estado      Boolean @default(true)
 
-  ventas Venta[]
+  ventas        Venta[]
+  oportunidades OportunidadComercial[]
 }
 
 model Venta {
@@ -370,6 +382,55 @@ model Pago {
   metodoPago MetodoPago
 
   venta Venta @relation(fields: [ventaId], references: [id])
+}
+
+model OportunidadComercial {
+  id         Int              @id @default(autoincrement())
+  titulo     String           @db.VarChar(180)
+  clienteId  Int
+  vendedorId Int
+  etapa      EtapaOportunidad @default(PROSPECTO)
+
+  montoEstimado Decimal? @db.Decimal(12, 2)
+  moneda        Moneda   @default(PEN)
+
+  descripcion      String?   @db.Text
+  proximaActividad String?   @db.VarChar(300)
+  fechaSeguimiento DateTime?
+  motivoPerdida    String?   @db.Text
+
+  fechaCreacion      DateTime  @default(now())
+  fechaActualizacion DateTime  @updatedAt
+  fechaCierre        DateTime?
+
+  cliente  Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  vendedor Usuario @relation("ResponsableOportunidad", fields: [vendedorId], references: [id], onDelete: Restrict)
+
+  historial HistorialOportunidad[]
+
+  @@index([clienteId])
+  @@index([vendedorId])
+  @@index([etapa])
+  @@index([fechaSeguimiento])
+  @@index([fechaCreacion])
+}
+
+model HistorialOportunidad {
+  id            Int @id @default(autoincrement())
+  oportunidadId Int
+  usuarioId     Int
+
+  etapaAnterior EtapaOportunidad?
+  etapaNueva    EtapaOportunidad
+
+  comentario  String?  @db.Text
+  fechaCambio DateTime @default(now())
+
+  oportunidad OportunidadComercial @relation(fields: [oportunidadId], references: [id], onDelete: Restrict)
+  usuario     Usuario              @relation("ResponsableHistorialOportunidad", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([oportunidadId, fechaCambio])
+  @@index([usuarioId])
 }
 
 // ==========================================

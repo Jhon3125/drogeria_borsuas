@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect } from "react";
 import { guardarCliente } from "./actions";
+import { UserRound, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type ClienteEditable = {
   id: number;
@@ -32,7 +34,12 @@ export function ClienteForm({ cliente, onCancelar, onGuardado }: Props) {
     <form action={accion} className="space-y-5" aria-label={cliente ? "Editar cliente" : "Registrar cliente"}>
       <input type="hidden" name="id" value={cliente?.id ?? ""} />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b pb-2">
+          <UserRound className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Información del cliente</h3>
+        </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-semibold text-slate-700">
           Nombre o razón social <span className="text-red-600">*</span>
           <input
@@ -97,6 +104,7 @@ export function ClienteForm({ cliente, onCancelar, onGuardado }: Props) {
           />
         </label>
       </div>
+      </section>
 
       {estado?.error && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -104,22 +112,14 @@ export function ClienteForm({ cliente, onCancelar, onGuardado }: Props) {
         </p>
       )}
 
-      <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4">
-        <button
-          type="button"
-          disabled={pendiente}
-          onClick={onCancelar}
-          className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-        >
+      <div className="flex justify-end gap-3 border-t pt-5">
+        <Button type="button" variant="outline" disabled={pendiente} onClick={onCancelar}>
           Cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={pendiente}
-          className="rounded-lg bg-[#123E70] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#087EBD] disabled:opacity-50"
-        >
+        </Button>
+        <Button type="submit" disabled={pendiente} className="min-w-36">
+          {pendiente && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {pendiente ? "Guardando..." : cliente ? "Guardar cambios" : "Registrar cliente"}
-        </button>
+        </Button>
       </div>
     </form>
   );
