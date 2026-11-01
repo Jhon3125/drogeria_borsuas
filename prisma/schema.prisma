@@ -432,6 +432,10 @@ model Cotizacion {
   validezHasta  DateTime?
   estado        EstadoCotizacion @default(BORRADOR)
 
+  // Versionamiento de cotizaciones
+  version              Int  @default(1)
+  cotizacionAnteriorId Int? @unique
+
   moneda       Moneda  @default(PEN)
   subtotal     Decimal @default(0) @db.Decimal(12, 2)
   descuento    Decimal @default(0) @db.Decimal(12, 2)
@@ -445,9 +449,11 @@ model Cotizacion {
 
   venta Venta?
 
-  cliente     Cliente               @relation(fields: [clienteId], references: [id])
-  vendedor    Usuario               @relation("VendedorCotizacion", fields: [vendedorId], references: [id])
-  oportunidad OportunidadComercial? @relation(fields: [oportunidadId], references: [id])
+  cliente            Cliente               @relation(fields: [clienteId], references: [id])
+  vendedor           Usuario               @relation("VendedorCotizacion", fields: [vendedorId], references: [id])
+  oportunidad        OportunidadComercial? @relation(fields: [oportunidadId], references: [id])
+  cotizacionAnterior Cotizacion?           @relation("RevisionesCotizacion", fields: [cotizacionAnteriorId], references: [id], onDelete: Restrict)
+  revisionSiguiente  Cotizacion?           @relation("RevisionesCotizacion")
 
   @@index([clienteId])
   @@index([vendedorId])

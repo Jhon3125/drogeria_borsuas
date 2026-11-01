@@ -217,6 +217,9 @@ export async function cambiarEtapaOportunidad(
       }
       // Regla de negocio: para comenzar Negociación debe existir una propuesta
       // vinculada a la oportunidad. Se comprueba en el servidor (también para drag & drop).
+      if (oportunidad.etapa === "PROSPECTO" && x.etapaNueva !== "CONTACTADO" && x.etapaNueva !== "PERDIDA") {
+        throw new Error("Primero registra el contacto y avanza a Contactado.");
+      }
       if (x.etapaNueva === "NEGOCIACION") {
         const propuestas = await tx.cotizacion.count({
           where: { oportunidadId: x.oportunidadId, estado: { not: "ANULADA" } },
@@ -254,6 +257,7 @@ export async function cambiarEtapaOportunidad(
       "La etapa cambió desde que abriste el tablero. Actualiza la página.",
       "La oportunidad cambió. Actualiza la página.",
       "Registra al menos una cotización antes de pasar a Negociación.",
+      "Primero registra el contacto y avanza a Contactado.",
     ].includes(error.message) ? error.message : "No se pudo cambiar la etapa." };
   }
 }

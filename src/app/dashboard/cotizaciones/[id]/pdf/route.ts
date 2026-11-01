@@ -166,7 +166,27 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     right(page, value, WIDTH - MARGIN - 7, y, isTotal ? bold : regular, isTotal ? 11 : 9, isTotal ? BLUE : INK);
     y -= isTotal ? 36 : 25;
   });
-  if (y > 115) text(page, "Cotización sujeta a confirmación comercial y disponibilidad de stock.", MARGIN, y - 12, regular, 9, MUTED, WIDTH - 2 * MARGIN);
+  const condiciones = [
+    cotizacion.validezHasta ? `Válida hasta: ${new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(cotizacion.validezHasta)}` : null,
+    cotizacion.condicionPago ? `Condición de pago: ${cotizacion.condicionPago}` : null,
+    cotizacion.plazoEntrega ? `Plazo de entrega: ${cotizacion.plazoEntrega}` : null,
+    cotizacion.observaciones ? `Observaciones: ${cotizacion.observaciones}` : null,
+  ].filter((x): x is string => Boolean(x));
+  if (condiciones.length) {
+    if (y < 145) {
+      footer(page, pageNum);
+      page = pdf.addPage([WIDTH, HEIGHT]); pageNum++; header(page, true); y = HEIGHT - 140;
+    }
+    y -= 10;
+    text(page, "CONDICIONES COMERCIALES", MARGIN, y, bold, 9, BLUE); y -= 18;
+    for (const condicion of condiciones) {
+      for (const line of splitLines(condicion, regular, 9, WIDTH - MARGIN * 2)) {
+        if (y < 82) { footer(page, pageNum); page = pdf.addPage([WIDTH, HEIGHT]); pageNum++; header(page, true); y = HEIGHT - 135; }
+        text(page, line, MARGIN, y, regular, 9, INK); y -= 14;
+      }
+    }
+  }
+  if (y > 90) text(page, "Propuesta sujeta a confirmación comercial y disponibilidad de stock.", MARGIN, y - 12, regular, 9, MUTED, WIDTH - 2 * MARGIN);
   footer(page, pageNum);
   const bytes = await pdf.save();
   return new NextResponse(new Uint8Array(bytes), {

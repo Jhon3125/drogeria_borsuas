@@ -7,6 +7,7 @@ import { ArrowRight, CalendarDays, CircleDollarSign, GripVertical, Plus, Search,
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CotizacionForm } from "@/app/dashboard/cotizaciones/form";
+import { AccionesEstadoCotizacion } from "@/app/dashboard/cotizaciones/acciones-estado";
 import { crearOportunidad, actualizarOportunidad, cambiarEtapaOportunidad, crearClienteDesdeCRM } from "./actions";
 
 type Etapa = "PROSPECTO" | "CONTACTADO" | "COTIZACION" | "NEGOCIACION" | "GANADA" | "PERDIDA";
@@ -70,6 +71,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
   const detalle = vistaLocal.find((x) => x.id === detalleId) ?? null;
   const oportunidadCotizar = vistaLocal.find((x) => x.id === cotizarId) ?? null;
   function abrirCotizacion(item: Oportunidad) {
+    if (item.etapa === "PROSPECTO") { setMensaje("Primero registra el contacto y avanza a Contactado para cotizar."); return; }
     if (item.etapa === "GANADA" || item.etapa === "PERDIDA") return;
     setCotizarId(item.id);
     setMensaje(null);
@@ -173,7 +175,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                 {o.fechaSeguimiento && <p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" />Seguimiento: {o.fechaSeguimiento.split("-").reverse().join("/")}</p>}
                 <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
                   <button type="button" draggable={false} onClick={() => setDetalleId(o.id)} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-[#123E70] hover:bg-slate-50"><Eye className="h-3.5 w-3.5" /> Detalle</button>
-                  {!cerrada && <button type="button" draggable={false} onClick={() => abrirCotizacion(o)} className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] font-semibold text-[#123E70] hover:bg-sky-100"><FileText className="h-3.5 w-3.5" /> Cotizar</button>}
+                  {!cerrada && o.etapa !== "PROSPECTO" && <button type="button" draggable={false} onClick={() => abrirCotizacion(o)} className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] font-semibold text-[#123E70] hover:bg-sky-100"><FileText className="h-3.5 w-3.5" /> Cotizar</button>}
                   {!cerrada && SIGUIENTE[o.etapa] && <button type="button" draggable={false} disabled={ocupado} onClick={() => solicitarMovimiento(o.id, SIGUIENTE[o.etapa]!.etapa)} className="inline-flex items-center gap-1 rounded-md bg-[#123E70] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#087EBD] disabled:opacity-50"><ArrowRight className="h-3.5 w-3.5" /> {SIGUIENTE[o.etapa]!.label}</button>}
                 </div>
                 {o.etapa === "PERDIDA" && o.motivoPerdida && <p className="mt-2 rounded-md bg-rose-50 p-2 text-xs text-rose-800">{o.motivoPerdida}</p>}
@@ -199,7 +201,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                 <h3 className="flex items-center gap-2 font-bold text-[#123E70]"><FileText className="h-4 w-4 text-[#087EBD]" /> Cotizaciones vinculadas</h3>
                 <p className="text-xs text-slate-500">{detalle.cotizaciones.length} propuesta(s) registrada(s)</p>
               </div>
-              {detalle.etapa !== "GANADA" && detalle.etapa !== "PERDIDA" && (
+              {detalle.etapa !== "PROSPECTO" && detalle.etapa !== "GANADA" && detalle.etapa !== "PERDIDA" && (
                 <button type="button" onClick={() => abrirCotizacion(detalle)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#123E70] px-3 py-2 text-xs font-semibold text-white hover:bg-[#087EBD]">
                   <Plus className="h-3.5 w-3.5" /> Nueva cotización
                 </button>
@@ -211,6 +213,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                   <div><p className="font-semibold text-[#123E70]">COT-{String(c.id).padStart(5, "0")}</p><p className="text-xs text-slate-500">{new Date(c.fecha).toLocaleDateString("es-PE")} · {c.estado.replaceAll("_", " ")}</p></div>
                   <span className="text-sm font-bold text-[#123E70]">{new Intl.NumberFormat("es-PE", { style: "currency", currency: c.moneda === "USD" ? "USD" : "PEN" }).format(Number(c.importeTotal))}</span>
                 </div>
+                <AccionesEstadoCotizacion cotizacionId={c.id} estado={c.estado} compacta />
                 <a href={`/dashboard/cotizaciones/${c.id}/pdf`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#087EBD] hover:underline"><FileText className="h-3.5 w-3.5" /> Ver PDF</a>
               </div>)}
             </div> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aún no existen cotizaciones para esta oportunidad.</p>}
