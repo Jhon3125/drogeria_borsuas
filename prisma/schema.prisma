@@ -31,17 +31,6 @@ enum EstadoUsuario {
   BLOQUEADO
 }
 
-enum EtapaVenta {
-  PROSPECTO
-  COTIZACION
-  NEGOCIACION
-  PAGADO
-  LIBERADO_DESPACHO
-  PROGRAMADO_RUTA
-  ENTREGADO
-  ANULADO
-}
-
 enum MetodoPago {
   EFECTIVO
   TRANSFERENCIA
@@ -114,6 +103,14 @@ enum EtapaOportunidad {
   PERDIDA
 }
 
+enum EstadoVenta {
+  CONFIRMADA
+  EN_PREPARACION
+  DESPACHADA
+  COMPLETADA
+  ANULADA
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -144,6 +141,7 @@ model Usuario {
   retencionesLiberadas     RetencionLote[]        @relation("RetencionLiberadaPor")
   oportunidadesComerciales OportunidadComercial[] @relation("ResponsableOportunidad")
   historialOportunidades   HistorialOportunidad[] @relation("ResponsableHistorialOportunidad")
+  cotizaciones             Cotizacion[]           @relation("VendedorCotizacion")
 }
 
 // ==========================================
@@ -172,11 +170,12 @@ model Producto {
   categoriaId  Int
 
   // Relaciones
-  categoria      Categoria              @relation(fields: [categoriaId], references: [id])
-  lotes          Lote[]
-  movimientos    MovimientoInventario[]
-  detallesCompra DetalleCompra[]
-  detallesVenta  DetalleVenta[]
+  categoria          Categoria              @relation(fields: [categoriaId], references: [id])
+  lotes              Lote[]
+  movimientos        MovimientoInventario[]
+  detallesCompra     DetalleCompra[]
+  detallesVenta      DetalleVenta[]
+  detallesCotizacion DetalleCotizacion[]
 }
 
 // ==========================================
@@ -239,12 +238,13 @@ model Lote {
   fechaIngreso       DateTime @default(now())
   fechaVencimiento   DateTime
 
-  producto         Producto               @relation(fields: [productoId], references: [id])
-  estadoCalidad    EstadoCalidadLote      @default(DISPONIBLE)
-  historialCalidad HistorialCalidadLote[]
-  movimientos      MovimientoInventario[]
-  recepciones      RecepcionCompra[]
-  retenciones      RetencionLote[]
+  producto          Producto               @relation(fields: [productoId], references: [id])
+  estadoCalidad     EstadoCalidadLote      @default(DISPONIBLE)
+  historialCalidad  HistorialCalidadLote[]
+  movimientos       MovimientoInventario[]
+  recepciones       RecepcionCompra[]
+  retenciones       RetencionLote[]
+  asignacionesVenta AsignacionLoteVenta[]
 
   @@unique([numeroLote, productoId])
 }
@@ -341,6 +341,7 @@ model Cliente {
 
   ventas        Venta[]
   oportunidades OportunidadComercial[]
+  cotizaciones  Cotizacion[]
 }
 
 model Venta {
@@ -351,15 +352,25 @@ model Venta {
   subtotal       Decimal     @default(0) @db.Decimal(12, 2)
   descuento      Decimal     @default(0) @db.Decimal(12, 2)
   importeTotal   Decimal     @db.Decimal(12, 2)
-  etapa          EtapaVenta  @default(PROSPECTO) // Define si es Cotización o Venta firme
+  estado         EstadoVenta @default(CONFIRMADA)
   metodoPago     MetodoPago?
   saldoPendiente Decimal     @default(0) @db.Decimal(12, 2)
 
-  cliente   Cliente        @relation(fields: [clienteId], references: [id])
-  vendedor  Usuario        @relation("Vendedor", fields: [vendedorId], references: [id])
-  detalles  DetalleVenta[]
-  pagos     Pago[]
-  despachos Despacho[]
+  cliente       Cliente               @relation(fields: [clienteId], references: [id])
+  vendedor      Usuario               @relation("Vendedor", fields: [vendedorId], references: [id])
+  detalles      DetalleVenta[]
+  pagos         Pago[]
+  despachos     Despacho[]
+  oportunidadId Int?
+  cotizacionId  Int?                  @unique
+  oportunidad   OportunidadComercial? @relation(fields: [oportunidadId], references: [id])
+  cotizacion    Cotizacion?           @relation(fields: [cotizacionId], references: [id])
+  moneda        Moneda                @default(PEN)
+
+  @@index([clienteId])
+  @@index([vendedorId])
+  @@index([oportunidadId])
+  @@index([estado])
 }
 
 model DetalleVenta {
@@ -372,6 +383,25 @@ model DetalleVenta {
 
   venta    Venta    @relation(fields: [ventaId], references: [id])
   producto Producto @relation(fields: [productoId], references: [id])
+
+  asignacionesLote AsignacionLoteVenta[]
+
+  @@index([ventaId])
+  @@index([productoId])
+}
+
+model AsignacionLoteVenta {
+  id              Int      @id @default(autoincrement())
+  detalleVentaId  Int
+  loteId          Int
+  cantidad        Int
+  fechaAsignacion DateTime @default(now())
+
+  detalleVenta DetalleVenta @relation(fields: [detalleVentaId], references: [id], onDelete: Restrict)
+  lote         Lote         @relation(fields: [loteId], references: [id], onDelete: Restrict)
+
+  @@unique([detalleVentaId, loteId])
+  @@index([loteId])
 }
 
 model Pago {
@@ -382,6 +412,62 @@ model Pago {
   metodoPago MetodoPago
 
   venta Venta @relation(fields: [ventaId], references: [id])
+}
+
+enum EstadoCotizacion {
+  BORRADOR
+  EMITIDA
+  ACEPTADA
+  RECHAZADA
+  VENCIDA
+  ANULADA
+}
+
+model Cotizacion {
+  id            Int              @id @default(autoincrement())
+  oportunidadId Int?
+  clienteId     Int
+  vendedorId    Int
+  fecha         DateTime         @default(now())
+  validezHasta  DateTime?
+  estado        EstadoCotizacion @default(BORRADOR)
+
+  moneda       Moneda  @default(PEN)
+  subtotal     Decimal @default(0) @db.Decimal(12, 2)
+  descuento    Decimal @default(0) @db.Decimal(12, 2)
+  importeTotal Decimal @db.Decimal(12, 2)
+
+  condicionPago String? @db.VarChar(100)
+  plazoEntrega  String? @db.VarChar(150)
+  observaciones String? @db.Text
+
+  detalles DetalleCotizacion[]
+
+  venta Venta?
+
+  cliente     Cliente               @relation(fields: [clienteId], references: [id])
+  vendedor    Usuario               @relation("VendedorCotizacion", fields: [vendedorId], references: [id])
+  oportunidad OportunidadComercial? @relation(fields: [oportunidadId], references: [id])
+
+  @@index([clienteId])
+  @@index([vendedorId])
+  @@index([oportunidadId])
+  @@index([estado])
+}
+
+model DetalleCotizacion {
+  id             Int     @id @default(autoincrement())
+  cotizacionId   Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(12, 2)
+  descuento      Decimal @default(0) @db.Decimal(12, 2)
+
+  cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id])
+  producto   Producto   @relation(fields: [productoId], references: [id])
+
+  @@index([cotizacionId])
+  @@index([productoId])
 }
 
 model OportunidadComercial {
@@ -406,7 +492,9 @@ model OportunidadComercial {
   cliente  Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   vendedor Usuario @relation("ResponsableOportunidad", fields: [vendedorId], references: [id], onDelete: Restrict)
 
-  historial HistorialOportunidad[]
+  historial    HistorialOportunidad[]
+  cotizaciones Cotizacion[]
+  ventas       Venta[]
 
   @@index([clienteId])
   @@index([vendedorId])

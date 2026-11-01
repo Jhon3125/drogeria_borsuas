@@ -19,6 +19,7 @@ import {
     Users,
     Wallet,
     ClipboardCheck,
+    Columns3,
     type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ const ICONOS: Record<IconoNav, LucideIcon> = {
     "file-text": FileText,
     wallet: Wallet,
     "clipboard-check": ClipboardCheck,
+    columns: Columns3,
 };
 
 const DESCRIPCIONES: Record<string, string> = {
