@@ -1,21 +1,126 @@
 "use client";
-import { useActionState, useState } from "react";
+
+import { useActionState, useEffect } from "react";
 import { guardarCliente } from "./actions";
-type ClienteEditable={id:number;razonSocial:string;documento:string;telefono:string|null;correo:string|null;direccion:string|null};
-export function ClienteForm({cliente}:{cliente?:ClienteEditable}){
-  const [abierto,setAbierto]=useState(!cliente);
-  const [estado,accion,pendiente]=useActionState(guardarCliente,undefined);
-  return <div className="rounded-xl border bg-white p-4 shadow-sm">
-    <button type="button" className="font-semibold text-[#123E70]" onClick={()=>setAbierto(x=>!x)}>{cliente?`Editar ${cliente.razonSocial}`:"+ Registrar cliente"}</button>
-    {abierto&&<form action={accion} className="mt-4 grid gap-3 md:grid-cols-2">
-      {cliente&&<input type="hidden" name="id" value={cliente.id}/>}
-      <label className="text-sm">Razón social / nombre<input required name="razonSocial" defaultValue={cliente?.razonSocial} maxLength={180} className="mt-1 w-full rounded-lg border p-2"/></label>
-      <label className="text-sm">DNI / RUC<input required name="documento" defaultValue={cliente?.documento} minLength={8} maxLength={11} inputMode="numeric" className="mt-1 w-full rounded-lg border p-2"/></label>
-      <label className="text-sm">Teléfono<input name="telefono" defaultValue={cliente?.telefono??""} maxLength={30} className="mt-1 w-full rounded-lg border p-2"/></label>
-      <label className="text-sm">Correo<input name="correo" type="email" defaultValue={cliente?.correo??""} className="mt-1 w-full rounded-lg border p-2"/></label>
-      <label className="text-sm md:col-span-2">Dirección<input name="direccion" defaultValue={cliente?.direccion??""} maxLength={300} className="mt-1 w-full rounded-lg border p-2"/></label>
-      <div className="md:col-span-2"><button disabled={pendiente} className="rounded-lg bg-[#123E70] px-4 py-2 font-semibold text-white disabled:opacity-50">{pendiente?"Guardando...":"Guardar cliente"}</button></div>
-      {estado?.error&&<p role="alert" className="text-red-700 md:col-span-2">{estado.error}</p>}{estado?.ok&&<p className="text-green-700 md:col-span-2">{estado.ok}</p>}
-    </form>}
-  </div>;
+
+type ClienteEditable = {
+  id: number;
+  razonSocial: string;
+  documento: string;
+  telefono: string | null;
+  correo: string | null;
+  direccion: string | null;
+};
+
+type Props = {
+  cliente?: ClienteEditable;
+  onCancelar: () => void;
+  onGuardado: () => void;
+};
+
+const inputClass =
+  "mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#087EBD] focus:ring-2 focus:ring-sky-100";
+
+export function ClienteForm({ cliente, onCancelar, onGuardado }: Props) {
+  const [estado, accion, pendiente] = useActionState(guardarCliente, undefined);
+
+  useEffect(() => {
+    if (estado?.ok) onGuardado();
+  }, [estado?.ok, onGuardado]);
+
+  return (
+    <form action={accion} className="space-y-5" aria-label={cliente ? "Editar cliente" : "Registrar cliente"}>
+      <input type="hidden" name="id" value={cliente?.id ?? ""} />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm font-semibold text-slate-700">
+          Nombre o razón social <span className="text-red-600">*</span>
+          <input
+            autoFocus
+            required
+            name="razonSocial"
+            defaultValue={cliente?.razonSocial ?? ""}
+            maxLength={180}
+            placeholder="Nombre completo o razón social"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="text-sm font-semibold text-slate-700">
+          DNI o RUC <span className="text-red-600">*</span>
+          <input
+            required
+            name="documento"
+            defaultValue={cliente?.documento ?? ""}
+            minLength={8}
+            maxLength={11}
+            pattern="(?:[0-9]{8}|[0-9]{11})"
+            title="Ingresa un DNI de 8 dígitos o un RUC de 11 dígitos"
+            inputMode="numeric"
+            placeholder="8 u 11 dígitos"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="text-sm font-semibold text-slate-700">
+          Teléfono
+          <input
+            name="telefono"
+            type="tel"
+            defaultValue={cliente?.telefono ?? ""}
+            maxLength={30}
+            placeholder="Teléfono de contacto"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="text-sm font-semibold text-slate-700">
+          Correo electrónico
+          <input
+            name="correo"
+            type="email"
+            defaultValue={cliente?.correo ?? ""}
+            placeholder="cliente@correo.com"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+          Dirección
+          <textarea
+            name="direccion"
+            defaultValue={cliente?.direccion ?? ""}
+            maxLength={300}
+            rows={2}
+            placeholder="Dirección comercial o domicilio"
+            className={`${inputClass} resize-y`}
+          />
+        </label>
+      </div>
+
+      {estado?.error && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {estado.error}
+        </p>
+      )}
+
+      <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          disabled={pendiente}
+          onClick={onCancelar}
+          className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={pendiente}
+          className="rounded-lg bg-[#123E70] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#087EBD] disabled:opacity-50"
+        >
+          {pendiente ? "Guardando..." : cliente ? "Guardar cambios" : "Registrar cliente"}
+        </button>
+      </div>
+    </form>
+  );
 }
