@@ -11,7 +11,7 @@ import { alternarCliente } from "./actions";
 type Cliente = {
   id: number;
   razonSocial: string;
-  documento: string;
+  documento: string | null;
   telefono: string | null;
   correo: string | null;
   direccion: string | null;
@@ -127,7 +127,9 @@ export function DirectorioClientes({ clientes }: Props) {
                 <tr key={c.id} className="hover:bg-slate-50">
                   <td className="px-5 py-4">
                     <p className="font-semibold text-slate-800">{c.razonSocial}</p>
-                    <p className="mt-1 text-xs text-slate-500">{c.documento.length === 8 ? "DNI" : "RUC"}: {c.documento}</p>
+                    <p className="mt-1 text-xs text-slate-500">{c.documento
+                      ? `${c.documento.length === 8 ? "DNI" : "RUC"}: ${c.documento}`
+                      : "Sin documento registrado (Prospecto)"}</p>
                   </td>
                   <td className="px-4 py-4 text-slate-600">
                     <p>{c.telefono || "Sin teléfono"}</p>

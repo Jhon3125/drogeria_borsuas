@@ -111,6 +111,29 @@ enum EstadoVenta {
   ANULADA
 }
 
+enum EstadoRelacionComercial {
+  PROSPECTO
+  CALIFICADO
+  DESCARTADO
+}
+
+enum TipoActividadComercial {
+  LLAMADA
+  WHATSAPP
+  CORREO
+  VISITA
+  OTRO
+  CALIFICACION
+}
+
+enum ResultadoActividadComercial {
+  CONTACTO_EFECTIVO
+  SIN_RESPUESTA
+  REPROGRAMADO
+  SIN_INTERES
+  CALIFICADO
+}
+
 // ==========================================
 // MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -142,6 +165,7 @@ model Usuario {
   oportunidadesComerciales OportunidadComercial[] @relation("ResponsableOportunidad")
   historialOportunidades   HistorialOportunidad[] @relation("ResponsableHistorialOportunidad")
   cotizaciones             Cotizacion[]           @relation("VendedorCotizacion")
+  actividadesComerciales   ActividadComercial[]   @relation("ResponsableActividadComercial")
 }
 
 // ==========================================
@@ -333,7 +357,7 @@ model RetencionLote {
 model Cliente {
   id          Int     @id @default(autoincrement())
   razonSocial String
-  documento   String  @unique // DNI o RUC
+  documento   String? @unique
   telefono    String?
   correo      String?
   direccion   String?
@@ -342,6 +366,9 @@ model Cliente {
   ventas        Venta[]
   oportunidades OportunidadComercial[]
   cotizaciones  Cotizacion[]
+
+  estadoRelacionComercial EstadoRelacionComercial @default(PROSPECTO)
+  fechaCalificacion       DateTime?
 }
 
 model Venta {
@@ -501,6 +528,7 @@ model OportunidadComercial {
   historial    HistorialOportunidad[]
   cotizaciones Cotizacion[]
   ventas       Venta[]
+  actividades  ActividadComercial[]
 
   @@index([clienteId])
   @@index([vendedorId])
@@ -524,6 +552,22 @@ model HistorialOportunidad {
   usuario     Usuario              @relation("ResponsableHistorialOportunidad", fields: [usuarioId], references: [id], onDelete: Restrict)
 
   @@index([oportunidadId, fechaCambio])
+  @@index([usuarioId])
+}
+
+model ActividadComercial {
+  id              Int                         @id @default(autoincrement())
+  oportunidadId   Int
+  usuarioId       Int
+  tipo            TipoActividadComercial
+  resultado       ResultadoActividadComercial
+  personaContacto String?                     @db.VarChar(120)
+  observaciones   String                      @db.Text
+  fecha           DateTime                    @default(now())
+  oportunidad     OportunidadComercial        @relation(fields: [oportunidadId], references: [id], onDelete: Restrict)
+  usuario         Usuario                     @relation("ResponsableActividadComercial", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([oportunidadId, fecha])
   @@index([usuarioId])
 }
 

@@ -15,6 +15,7 @@ const importeDosDecimales = importe.refine(
 const schema = z.object({
   clienteId: z.number().int().positive(),
   oportunidadId: z.number().int().positive().nullable().optional(),
+  revisarCotizacionId: z.number().int().positive().nullable().optional(),
   descuento: importeDosDecimales,
   observaciones: z.string().max(3000).optional(),
   condicionPago: z.string().max(100).optional(),
@@ -37,16 +38,30 @@ export async function crearCotizacion(_: EstadoCotizacion, form: FormData): Prom
   catch { return { error: "Formulario inválido." }; }
   const valid = schema.safeParse(payload);
   if (!valid.success) return { error: valid.error.issues[0]?.message ?? "Datos inválidos." };
-  const { clienteId, oportunidadId, items, descuento, observaciones, condicionPago, plazoEntrega, validezHasta } = valid.data;
+  const { clienteId, oportunidadId, revisarCotizacionId, items, descuento, observaciones, condicionPago, plazoEntrega, validezHasta } = valid.data;
+  // La revisión debe ser una nueva cotización, no la modificación del documento histórico.
+  // La validación definitiva y la creación se efectúan en la misma transacción.
   const ids = items.map((i) => i.productoId);
   if (new Set(ids).size !== ids.length) return { error: "No se puede repetir el mismo producto." };
 
   const [cliente, productos, oportunidad] = await Promise.all([
-    prisma.cliente.findFirst({ where: { id: clienteId, estado: true }, select: { id: true } }),
+    prisma.cliente.findFirst({
+      where: {
+        id: clienteId,
+        estado: true,
+      },
+      select: {
+        id: true,
+        estadoRelacionComercial: true,
+      },
+    }),
     prisma.producto.findMany({ where: { id: { in: ids }, estado: true }, select: { id: true, moneda: true } }),
     oportunidadId ? prisma.oportunidadComercial.findUnique({ where: { id: oportunidadId }, select: { clienteId: true, vendedorId: true, etapa: true } }) : Promise.resolve(null),
   ]);
   if (!cliente || productos.length !== ids.length) return { error: "Cliente o producto inexistente o inactivo." };
+  if (cliente.estadoRelacionComercial !== "CALIFICADO") {
+    return { error: "Registra el primer contacto y completa la calificación comercial del cliente antes de cotizar." };
+  }
   if (oportunidadId) {
     if (!oportunidad || oportunidad.clienteId !== clienteId) return { error: "La oportunidad no corresponde al cliente." };
     if (oportunidad.etapa === "PROSPECTO") return { error: "Registra el primer contacto y avanza a Contactado antes de cotizar." };
@@ -73,30 +88,72 @@ export async function crearCotizacion(_: EstadoCotizacion, form: FormData): Prom
     if (fechaValidez.getTime() < fechaHoyUTC) return { error: "La validez no puede ser una fecha anterior a hoy." };
   }
   try {
-    await prisma.cotizacion.create({
-      data: {
-        clienteId, vendedorId: Number(usuario.id), oportunidadId: oportunidadId ?? null,
-        estado: "BORRADOR", moneda, validezHasta: fechaValidez,
-        condicionPago: condicionPago?.trim() || null,
-        plazoEntrega: plazoEntrega?.trim() || null,
-        observaciones: observaciones?.trim() || null,
-        subtotal: (subtotalCent / 100).toFixed(2),
-        descuento: (descuentoGeneralCent / 100).toFixed(2),
-        importeTotal: (totalCent / 100).toFixed(2),
-        detalles: { create: items.map((i) => ({
-          productoId: i.productoId,
-          cantidad: i.cantidad,
-          precioUnitario: (centavos(i.precioUnitario) / 100).toFixed(2),
-          descuento: (centavos(i.descuento) / 100).toFixed(2),
-        })) },
-      },
+    await prisma.$transaction(async (tx) => {
+      const clienteActual = await tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { estado: true, estadoRelacionComercial: true },
+      });
+      if (!clienteActual?.estado || clienteActual.estadoRelacionComercial !== "CALIFICADO") {
+        throw new Error("El cliente debe estar activo y calificado para registrar cotizaciones.");
+      }
+      let version = 1;
+      let cotizacionAnteriorId: number | null = null;
+      if (revisarCotizacionId) {
+        const anterior = await tx.cotizacion.findUnique({
+          where: { id: revisarCotizacionId },
+          select: {
+            id: true, version: true, estado: true, clienteId: true,
+            oportunidadId: true, vendedorId: true, moneda: true,
+            revisionSiguiente: { select: { id: true } }
+          },
+        });
+        if (!anterior) throw new Error("La cotización de origen no existe.");
+        if (anterior.estado !== "RECHAZADA") throw new Error("Solo se pueden revisar cotizaciones rechazadas.");
+        if (anterior.revisionSiguiente) throw new Error("Esta cotización ya tiene una revisión. Continúa desde la última versión.");
+        if (usuario.rol === "COMERCIAL" && anterior.vendedorId !== Number(usuario.id)) throw new Error("Sin permisos para revisar la cotización.");
+        if (anterior.clienteId !== clienteId || anterior.oportunidadId !== (oportunidadId ?? null) || anterior.moneda !== moneda) {
+          throw new Error("La revisión debe conservar el cliente, la oportunidad y la moneda de origen.");
+        }
+        version = anterior.version + 1;
+        cotizacionAnteriorId = anterior.id;
+      }
+      await tx.cotizacion.create({
+        data: {
+          clienteId, vendedorId: Number(usuario.id), oportunidadId: oportunidadId ?? null,
+          version, cotizacionAnteriorId,
+          estado: "BORRADOR", moneda, validezHasta: fechaValidez,
+          condicionPago: condicionPago?.trim() || null,
+          plazoEntrega: plazoEntrega?.trim() || null,
+          observaciones: observaciones?.trim() || null,
+          subtotal: (subtotalCent / 100).toFixed(2),
+          descuento: (descuentoGeneralCent / 100).toFixed(2),
+          importeTotal: (totalCent / 100).toFixed(2),
+          detalles: {
+            create: items.map((i) => ({
+              productoId: i.productoId,
+              cantidad: i.cantidad,
+              precioUnitario: (centavos(i.precioUnitario) / 100).toFixed(2),
+              descuento: (centavos(i.descuento) / 100).toFixed(2),
+            }))
+          },
+        },
+      });
     });
-  } catch {
-    return { error: "No se pudo registrar la cotización. Verifica los datos e inténtalo de nuevo." };
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : "";
+    const permitidos = [
+      "La cotización de origen no existe.",
+      "Solo se pueden revisar cotizaciones rechazadas.",
+      "Esta cotización ya tiene una revisión. Continúa desde la última versión.",
+      "Sin permisos para revisar la cotización.",
+      "La revisión debe conservar el cliente, la oportunidad y la moneda de origen.",
+      "El cliente debe estar activo y calificado para registrar cotizaciones.",
+    ];
+    return { error: permitidos.includes(mensaje) ? mensaje : "No se pudo registrar la nueva versión. Actualiza la página e inténtalo otra vez." };
   }
   revalidatePath("/dashboard/cotizaciones");
   revalidatePath("/dashboard/ventas/crm");
-  return { ok: "Cotización guardada como borrador. No se reservó ni descontó stock." };
+  return { ok: revisarCotizacionId ? "Nueva versión guardada como borrador. La propuesta original se conserva." : "Cotización guardada como borrador. No se reservó ni descontó stock." };
 }
 
 // Transiciones formales de la propuesta. No crean venta ni modifican inventario.
@@ -131,10 +188,14 @@ export async function cambiarEstadoCotizacion(
         select: {
           id: true, estado: true, vendedorId: true, validezHasta: true,
           oportunidadId: true, oportunidad: { select: { etapa: true, vendedorId: true } },
+          cliente: { select: { estado: true, estadoRelacionComercial: true } },
           detalles: { select: { id: true }, take: 1 },
         },
       });
       if (!cotizacion) throw new Error("Cotización no encontrada.");
+      if (!cotizacion.cliente.estado || cotizacion.cliente.estadoRelacionComercial !== "CALIFICADO") {
+        throw new Error("El cliente debe estar activo y calificado para gestionar esta cotización.");
+      }
       if (usuario.rol === "COMERCIAL" && (
         cotizacion.vendedorId !== Number(usuario.id) ||
         (cotizacion.oportunidad && cotizacion.oportunidad.vendedorId !== Number(usuario.id))
@@ -157,7 +218,7 @@ export async function cambiarEstadoCotizacion(
       if (actualizada.count !== 1) throw new Error("La cotización fue modificada por otro usuario.");
       return estadoNuevo === "EMITIDA" ? "Cotización emitida correctamente." :
         estadoNuevo === "ACEPTADA" ? "Cotización aceptada. La venta todavía no se ha generado." :
-        "Cotización rechazada correctamente.";
+          "Cotización rechazada correctamente.";
     });
     revalidatePath("/dashboard/cotizaciones");
     revalidatePath("/dashboard/ventas/crm");
@@ -165,6 +226,7 @@ export async function cambiarEstadoCotizacion(
   } catch (error) {
     const permitidos = [
       "Cotización no encontrada.", "No tienes permisos sobre esta cotización.",
+      "El cliente debe estar activo y calificado para gestionar esta cotización.",
       "La cotización cambió de estado. Actualiza la página.",
       "La oportunidad vinculada no admite esta operación.",
       "No se puede emitir una cotización sin productos.",

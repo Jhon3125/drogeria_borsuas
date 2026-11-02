@@ -35,7 +35,11 @@ export default async function DetalleClientePage({ params }: Props) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Clientes / Ficha individual</p>
             <h1 className="mt-1 text-2xl font-bold text-[#123E70] md:text-3xl">{cliente.razonSocial}</h1>
-            <p className="mt-1 text-sm text-slate-500">{cliente.documento.length === 8 ? "DNI" : "RUC"}: {cliente.documento}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {cliente.documento
+                ? `${cliente.documento.length === 8 ? "DNI" : "RUC"}: ${cliente.documento}`
+                : "Sin documento registrado (Prospecto)"}
+            </p>
           </div>
           <span className={`rounded-full px-4 py-2 text-sm font-semibold ${cliente.estado ? "bg-green-50 text-[#238B55]" : "bg-slate-100 text-slate-600"}`}>
             {cliente.estado ? "Cliente activo" : "Cliente inactivo"}

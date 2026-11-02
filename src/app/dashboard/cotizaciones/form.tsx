@@ -114,27 +114,42 @@ function SelectorProducto({
   );
 }
 
-export function CotizacionForm({ clientes, productos, clienteInicial, oportunidadId, onGuardado, onCancelar }: {
+export type CotizacionBase = {
+  id: number;
+  version: number;
+  clienteId: number;
+  oportunidadId: number | null;
+  descuento: string;
+  observaciones: string;
+  validezHasta: string;
+  condicionPago: string;
+  plazoEntrega: string;
+  items: { productoId: number; cantidad: number; precioUnitario: string; descuento: string }[];
+};
+
+export function CotizacionForm({ clientes, productos, clienteInicial, oportunidadId, onGuardado, onCancelar, revision }: {
   clientes: Cliente[];
   productos: Producto[];
   clienteInicial?: number;
   oportunidadId?: number;
   onGuardado?: () => void;
   onCancelar?: () => void;
+  revision?: CotizacionBase;
 }) {
   const router = useRouter();
-  const nextKey = useRef(1);
+  const nextKey = useRef((revision?.items.length ?? 1) + 1);
   const nuevaLinea = (): Item => ({ key: nextKey.current++, productoId: 0, cantidad: 1, precioUnitario: "0.00", descuento: "0.00" });
-  const [clienteId, setClienteId] = useState(clienteInicial ?? 0);
-  const [items, setItems] = useState<Item[]>(() => [{ key: 0, productoId: 0, cantidad: 1, precioUnitario: "0.00", descuento: "0.00" }]);
-  const [descuento, setDescuento] = useState("0.00");
-  const [observaciones, setObservaciones] = useState("");
-  const [validezHasta, setValidezHasta] = useState("");
-  const [condicionPago, setCondicionPago] = useState("");
-  const [plazoEntrega, setPlazoEntrega] = useState("");
+  const [clienteId, setClienteId] = useState(revision?.clienteId ?? clienteInicial ?? 0);
+  const [items, setItems] = useState<Item[]>(() => revision ? revision.items.map((it, i) => ({ ...it, key: i })) : [{ key: 0, productoId: 0, cantidad: 1, precioUnitario: "0.00", descuento: "0.00" }]);
+  const [descuento, setDescuento] = useState(revision?.descuento ?? "0.00");
+  const [observaciones, setObservaciones] = useState(revision?.observaciones ?? "");
+  const [validezHasta, setValidezHasta] = useState(revision?.validezHasta ?? "");
+  const [condicionPago, setCondicionPago] = useState(revision?.condicionPago ?? "");
+  const [plazoEntrega, setPlazoEntrega] = useState(revision?.plazoEntrega ?? "");
   const [estado, accion, pendiente] = useActionState(crearCotizacion, undefined);
   const notificado = useRef(false);
 
+  const oportunidadVinculada = revision?.oportunidadId ?? oportunidadId;
   const primeraLinea = items.find((it) => it.productoId !== 0);
   const moneda: "PEN" | "USD" = productos.find((p) => p.id === primeraLinea?.productoId)?.moneda ?? "PEN";
   const productosDisponibles = productos.filter((p) => !primeraLinea || p.moneda === moneda);
@@ -157,14 +172,14 @@ export function CotizacionForm({ clientes, productos, clienteInicial, oportunida
   return <form action={accion} className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div className="flex-1 space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5">
-        <div className="flex items-start gap-3"><span className="rounded-xl bg-sky-50 p-2.5 text-[#123E70]"><FileText className="h-5 w-5" /></span><div><h2 className="text-xl font-bold text-[#123E70]">Nueva cotización</h2><p className="mt-1 text-sm text-slate-500">Prepara una propuesta comercial sin afectar inventario.</p></div></div>
+        <div className="flex items-start gap-3"><span className="rounded-xl bg-sky-50 p-2.5 text-[#123E70]"><FileText className="h-5 w-5" /></span><div><h2 className="text-xl font-bold text-[#123E70]">{revision ? `Revisión v${revision.version + 1} de COT-${String(revision.id).padStart(5, "0")}` : "Nueva cotización"}</h2><p className="mt-1 text-sm text-slate-500">Prepara una propuesta comercial sin afectar inventario.</p></div></div>
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600"><CheckCircle2 className="h-3.5 w-3.5" /> Borrador</span>
       </div>
-      {oportunidadId && <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-medium text-[#123E70]">Vinculada a oportunidad OP-{String(oportunidadId).padStart(4, "0")}. Crear esta propuesta no modifica su etapa.</div>}
+      {oportunidadVinculada && <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-medium text-[#123E70]">Vinculada a oportunidad OP-{String(oportunidadVinculada).padStart(4, "0")}. Crear esta propuesta no modifica su etapa.</div>}
 
       <section className="space-y-3"><h3 className="flex items-center gap-2 text-sm font-bold text-[#123E70]"><CalendarDays className="h-4 w-4" /> Datos comerciales</h3>
         <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Cliente *<select required value={clienteId} disabled={Boolean(oportunidadId)} onChange={(e) => setClienteId(Number(e.target.value))} className={input}><option value={0}>Seleccionar cliente</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.razonSocial}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Cliente *<select required value={clienteId} disabled={Boolean(oportunidadId || revision)} onChange={(e) => setClienteId(Number(e.target.value))} className={input}><option value={0}>Seleccionar cliente</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.razonSocial}</option>)}</select></label>
           <div className="rounded-lg bg-slate-50 px-3 py-2.5"><p className="text-xs text-slate-500">Moneda</p><p className="mt-1 text-sm font-semibold">{moneda === "USD" ? "USD · Dólares" : "PEN · Soles"}</p></div>
           <label className="text-xs font-semibold text-slate-700">Validez hasta<input type="date" value={validezHasta} onChange={(e) => setValidezHasta(e.target.value)} className={input}/></label>
         </div>
@@ -189,7 +204,7 @@ export function CotizacionForm({ clientes, productos, clienteInicial, oportunida
 
       <section className="space-y-3"><h3 className="flex items-center gap-2 text-sm font-bold text-[#123E70]"><ClipboardList className="h-4 w-4"/> Condiciones comerciales</h3><div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-700">Condición de pago<input maxLength={100} placeholder="Ej. Contado o crédito a 30 días" value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} className={input}/></label><label className="text-xs font-semibold text-slate-700">Plazo de entrega<input maxLength={150} placeholder="Ej. 3 días hábiles" value={plazoEntrega} onChange={(e) => setPlazoEntrega(e.target.value)} className={input}/></label><label className="text-xs font-semibold text-slate-700 sm:col-span-2">Observaciones<textarea rows={3} maxLength={3000} placeholder="Detalles y condiciones adicionales..." value={observaciones} onChange={(e) => setObservaciones(e.target.value)} className={input}/></label></div></section>
     </div>
-    <input type="hidden" name="payload" value={JSON.stringify({ clienteId, oportunidadId: oportunidadId ?? null, descuento: parse(descuento), observaciones, validezHasta: validezHasta || null, condicionPago, plazoEntrega, items: items.map(({ productoId, cantidad, precioUnitario, descuento: d }) => ({ productoId, cantidad, precioUnitario: parse(precioUnitario), descuento: parse(d) })) })}/>
+    <input type="hidden" name="payload" value={JSON.stringify({ clienteId, oportunidadId: revision ? revision.oportunidadId : oportunidadId ?? null, revisarCotizacionId: revision?.id ?? null, descuento: parse(descuento), observaciones, validezHasta: validezHasta || null, condicionPago, plazoEntrega, items: items.map(({ productoId, cantidad, precioUnitario, descuento: d }) => ({ productoId, cantidad, precioUnitario: parse(precioUnitario), descuento: parse(d) })) })}/>
     <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/95 p-4 backdrop-blur sm:px-6"><div className="text-sm"><span className="text-slate-500">Total</span><p className="text-lg font-bold text-[#123E70]">{money(Math.max(0, totalCent) / 100, moneda)}</p></div><div className="flex gap-2">{onCancelar && <button type="button" onClick={onCancelar} disabled={pendiente} className="rounded-lg border px-4 py-2.5 text-sm font-medium">Cancelar</button>}<button type="submit" disabled={pendiente || invalido} className="rounded-lg bg-[#123E70] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#087EBD] disabled:cursor-not-allowed disabled:opacity-50">{pendiente ? "Guardando..." : "Guardar borrador"}</button></div></div>
     {(estado?.error || estado?.ok) && <p role={estado.error ? "alert" : "status"} className={`px-5 pb-4 text-sm ${estado.error ? "text-rose-700" : "text-emerald-700"}`}>{estado.error ?? estado.ok}</p>}
   </form>;
