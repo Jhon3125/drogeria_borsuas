@@ -1,248 +1,78 @@
-
 "use client";
 
 import { useActionState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import {
-    guardarProveedor,
-    type EstadoProveedor,
-} from "./actions";
+import { Building2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { guardarProveedor } from "./actions";
 
-type ProveedorData = {
-    id: number;
-    razonSocial: string;
-    ruc: string;
-    contacto: string | null;
-    telefono: string | null;
-    correo: string | null;
-    direccion: string | null;
+type ProveedorEditable = {
+  id: number;
+  razonSocial: string;
+  ruc: string;
+  contacto: string | null;
+  telefono: string | null;
+  correo: string | null;
+  direccion: string | null;
 };
 
 type Props = {
-    proveedor?: ProveedorData;
-    onCancelar?: () => void;
+  proveedor?: ProveedorEditable;
+  onCancelar: () => void;
+  onGuardado: () => void;
 };
 
-const estadoInicial: EstadoProveedor = undefined;
+const campo = "mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#087EBD] focus:ring-2 focus:ring-sky-100";
 
-export function FormularioProveedor({
-    proveedor,
-    onCancelar,
-}: Props) {
-    const router = useRouter();
+export function FormularioProveedor({ proveedor, onCancelar, onGuardado }: Props) {
+  const [estado, accion, pendiente] = useActionState(guardarProveedor, undefined);
 
-    const [estado, accion, pendiente] = useActionState(
-        guardarProveedor,
-        estadoInicial
-    );
+  useEffect(() => {
+    if (estado?.ok) onGuardado();
+  }, [estado?.ok, onGuardado]);
 
-    useEffect(() => {
-        if (estado?.ok) {
-            router.refresh();
-        }
-    }, [estado?.ok, router]);
-
-    const esEdicion = Boolean(proveedor);
-
-    return (
-        <form
-            action={accion}
-            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-        >
-            <input
-                type="hidden"
-                name="id"
-                value={proveedor?.id ?? ""}
-            />
-
-            <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h2 className="text-lg font-bold text-[#123E70]">
-                        {esEdicion
-                            ? "Editar proveedor"
-                            : "Registrar nuevo proveedor"}
-                    </h2>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                        {esEdicion
-                            ? "Actualiza los datos generales del proveedor."
-                            : "Completa los datos de la empresa proveedora."}
-                    </p>
-                </div>
-            </div>
-
-            <div className="grid gap-5 p-5 md:grid-cols-2">
-                <Campo
-                    id="proveedor-razonSocial"
-                    nombre="razonSocial"
-                    etiqueta="Razón social"
-                    valor={proveedor?.razonSocial ?? ""}
-                    requerido
-                    maxLength={180}
-                    placeholder="Ej. Distribuidora Farmacéutica SAC"
-                />
-
-                <Campo
-                    id="proveedor-ruc"
-                    nombre="ruc"
-                    etiqueta="RUC"
-                    valor={proveedor?.ruc ?? ""}
-                    requerido
-                    maxLength={11}
-                    minLength={11}
-                    inputMode="numeric"
-                    pattern="[0-9]{11}"
-                    placeholder="11 dígitos"
-                />
-
-                <Campo
-                    id="proveedor-contacto"
-                    nombre="contacto"
-                    etiqueta="Persona de contacto"
-                    valor={proveedor?.contacto ?? ""}
-                    maxLength={120}
-                    placeholder="Nombre del representante"
-                />
-
-                <Campo
-                    id="proveedor-telefono"
-                    nombre="telefono"
-                    etiqueta="Teléfono"
-                    valor={proveedor?.telefono ?? ""}
-                    maxLength={30}
-                    tipo="tel"
-                    placeholder="Número de contacto"
-                />
-
-                <Campo
-                    id="proveedor-correo"
-                    nombre="correo"
-                    etiqueta="Correo electrónico"
-                    valor={proveedor?.correo ?? ""}
-                    tipo="email"
-                    maxLength={254}
-                    placeholder="contacto@empresa.com"
-                />
-
-                <div className="space-y-1.5 md:col-span-2">
-                    <label
-                        htmlFor="proveedor-direccion"
-                        className="block text-sm font-semibold text-slate-700"
-                    >
-                        Dirección
-                    </label>
-
-                    <textarea
-                        id="proveedor-direccion"
-                        name="direccion"
-                        defaultValue={proveedor?.direccion ?? ""}
-                        rows={2}
-                        maxLength={300}
-                        placeholder="Dirección fiscal o comercial"
-                        className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#087EBD] focus:ring-2 focus:ring-sky-100"
-                    />
-                </div>
-
-                {estado?.error && (
-                    <div
-                        role="alert"
-                        className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 md:col-span-2"
-                    >
-                        {estado.error}
-                    </div>
-                )}
-
-                {estado?.ok && (
-                    <div
-                        role="status"
-                        className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-[#238B55] md:col-span-2"
-                    >
-                        {estado.ok}
-                    </div>
-                )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-                {onCancelar && (
-                    <button
-                        type="button"
-                        disabled={pendiente}
-                        onClick={onCancelar}
-                        className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                        Cancelar
-                    </button>
-                )}
-
-                <button
-                    type="submit"
-                    disabled={pendiente}
-                    className="rounded-lg bg-[#123E70] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#087EBD] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    {pendiente
-                        ? "Guardando..."
-                        : esEdicion
-                            ? "Guardar cambios"
-                            : "Registrar proveedor"}
-                </button>
-            </div>
-        </form>
-    );
-}
-
-type CampoProps = {
-    id: string;
-    nombre: string;
-    etiqueta: string;
-    valor: string;
-    requerido?: boolean;
-    tipo?: string;
-    maxLength?: number;
-    minLength?: number;
-    inputMode?: "numeric";
-    pattern?: string;
-    placeholder?: string;
-};
-
-function Campo({
-    id,
-    nombre,
-    etiqueta,
-    valor,
-    requerido = false,
-    tipo = "text",
-    maxLength,
-    minLength,
-    inputMode,
-    pattern,
-    placeholder,
-}: CampoProps) {
-    return (
-        <div className="space-y-1.5">
-            <label
-                htmlFor={id}
-                className="block text-sm font-semibold text-slate-700"
-            >
-                {etiqueta}
-
-                {requerido && (
-                    <span className="ml-1 text-red-600">*</span>
-                )}
-            </label>
-
-            <input
-                id={id}
-                name={nombre}
-                type={tipo}
-                defaultValue={valor}
-                required={requerido}
-                maxLength={maxLength}
-                minLength={minLength}
-                inputMode={inputMode}
-                pattern={pattern}
-                placeholder={placeholder}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#087EBD] focus:ring-2 focus:ring-sky-100"
-            />
+  return (
+    <form action={accion} className="space-y-5" aria-label={proveedor ? "Editar proveedor" : "Registrar proveedor"}>
+      <input type="hidden" name="id" value={proveedor?.id ?? ""} />
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b pb-2">
+          <Building2 className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Información del proveedor</h3>
         </div>
-    );
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Razón social <span className="text-red-600">*</span>
+            <input autoFocus required name="razonSocial" minLength={3} maxLength={180} defaultValue={proveedor?.razonSocial ?? ""} placeholder="Ej. Distribuidora Farmacéutica SAC" className={campo} />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            RUC <span className="text-red-600">*</span>
+            <input required name="ruc" inputMode="numeric" minLength={11} maxLength={11} pattern="[0-9]{11}" title="Ingresa un RUC de 11 dígitos" defaultValue={proveedor?.ruc ?? ""} placeholder="11 dígitos" className={campo} />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Persona de contacto
+            <input name="contacto" maxLength={120} defaultValue={proveedor?.contacto ?? ""} placeholder="Nombre del representante" className={campo} />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Teléfono
+            <input name="telefono" type="tel" maxLength={30} defaultValue={proveedor?.telefono ?? ""} placeholder="Número de contacto" className={campo} />
+          </label>
+          <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+            Correo electrónico
+            <input name="correo" type="email" maxLength={254} defaultValue={proveedor?.correo ?? ""} placeholder="contacto@empresa.com" className={campo} />
+          </label>
+          <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+            Dirección
+            <textarea name="direccion" maxLength={300} rows={2} defaultValue={proveedor?.direccion ?? ""} placeholder="Dirección fiscal o comercial" className={`${campo} resize-y`} />
+          </label>
+        </div>
+      </section>
+      {estado?.error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{estado.error}</p>}
+      <div className="flex justify-end gap-3 border-t pt-5">
+        <Button type="button" variant="outline" disabled={pendiente} onClick={onCancelar}>Cancelar</Button>
+        <Button type="submit" disabled={pendiente} className="min-w-36">
+          {pendiente && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {pendiente ? "Guardando..." : proveedor ? "Guardar cambios" : "Registrar proveedor"}
+        </Button>
+      </div>
+    </form>
+  );
 }
