@@ -12,9 +12,10 @@ export type IconoNav =
     | "users-round"
     | "file-text"
     | "wallet"
-    | "clipboard-check";
+    | "clipboard-check"
+    | "columns";
 
-export type GrupoNav = "principal" | "administracion";
+export type GrupoNav = "principal" | "comercial" | "administracion";
 
 export type ItemNav = {
     titulo: string;
@@ -79,9 +80,10 @@ export const NAVEGACION: ItemNav[] = [
         icono: "clipboard-check",
         grupo: "principal",
     },
-    { titulo: "Clientes", href: "/dashboard/clientes", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "users-round", grupo: "principal" },
-    { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "principal" },
-    { titulo: "Ventas y CRM", href: "/dashboard/ventas", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "shopping-cart", grupo: "principal" },
+    { titulo: "Clientes", href: "/dashboard/clientes", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "users-round", grupo: "comercial" },
+    { titulo: "Oportunidades", href: "/dashboard/ventas/crm", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "columns", grupo: "comercial" },
+    { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "comercial" },
+    { titulo: "Ventas", href: "/dashboard/ventas", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "shopping-cart", grupo: "comercial" },
     {
         titulo: "Usuarios",
         href: "/dashboard/usuarios",

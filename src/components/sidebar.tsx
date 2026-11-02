@@ -12,6 +12,7 @@ import {
     ChevronDown,
     ChevronUp,
     Boxes,
+    Columns3,
     Building2,
     CalendarClock,
     CarFront,
@@ -69,6 +70,7 @@ const ICONOS: Record<IconoNav, IconoComponente> = {
     "file-text": FileText,
     wallet: Wallet,
     "clipboard-check": ClipboardCheck,
+    columns: Columns3,
 };
 
 const ICONOS_FUTUROS: Record<
@@ -93,14 +95,6 @@ const ICONOS_FUTUROS: Record<
     history: History,
     "package-search": PackageSearch,
 };
-
-// Módulos ya implementados que deben ocultarse/mostrarse mediante
-// el botón "Mostrar / Ocultar módulos futuros", sin desactivar sus rutas.
-const COMERCIALES_PLEGABLES = new Set([
-    "/dashboard/clientes",
-    "/dashboard/cotizaciones",
-    "/dashboard/ventas",
-]);
 
 const FINANZAS_HABILITADAS = new Set([
     "/dashboard/ordenes-pago",
@@ -157,9 +151,7 @@ export function Sidebar({
 
     const [mostrarFuturos, setMostrarFuturos] = useState(false);
 
-    const comercialesPlegables = items.filter((item) =>
-        COMERCIALES_PLEGABLES.has(item.href)
-    );
+    const comerciales = items.filter((item) => item.grupo === "comercial");
 
     const finanzas = items.filter((item) =>
         FINANZAS_HABILITADAS.has(item.href)
@@ -168,7 +160,6 @@ export function Sidebar({
     const principales = items.filter(
         (item) =>
             item.grupo === "principal" &&
-            !COMERCIALES_PLEGABLES.has(item.href) &&
             !FINANZAS_HABILITADAS.has(item.href)
     );
 
@@ -182,15 +173,17 @@ export function Sidebar({
         const activo =
             item.href === "/dashboard"
                 ? pathname === "/dashboard"
-                : item.href === "/dashboard/ordenes-pago"
-                    ? pathname === "/dashboard/ordenes-pago" ||
-                    (
-                        /^\/dashboard\/ordenes-pago\/\d+(?:\/.*)?$/.test(
-                            pathname
+                : item.href === "/dashboard/ventas"
+                    ? pathname === "/dashboard/ventas" || /^\/dashboard\/ventas\/\d+(?:\/.*)?$/.test(pathname)
+                    : item.href === "/dashboard/ordenes-pago"
+                        ? pathname === "/dashboard/ordenes-pago" ||
+                        (
+                            /^\/dashboard\/ordenes-pago\/\d+(?:\/.*)?$/.test(
+                                pathname
+                            )
                         )
-                    )
-                    : pathname === item.href ||
-                    pathname.startsWith(`${item.href}/`);
+                        : pathname === item.href ||
+                        pathname.startsWith(`${item.href}/`);
 
         return (
             <Link
@@ -296,6 +289,14 @@ export function Sidebar({
                     </section>
                 )}
 
+                {/* CRM y ventas: siempre accesibles, no son módulos futuros */}
+                {comerciales.length > 0 && (
+                    <section>
+                        <TituloGrupo>Comercial y ventas</TituloGrupo>
+                        <div className="space-y-1">{comerciales.map(renderItem)}</div>
+                    </section>
+                )}
+
                 {/* Finanzas */}
                 {finanzas.length > 0 && (
                     <section>
@@ -312,7 +313,7 @@ export function Sidebar({
                 {/* Módulos futuros */}
 
                 {/* Control de módulos futuros */}
-                {(futuros.length > 0 || comercialesPlegables.length > 0) && (
+                {(futuros.length > 0) && (
                     <section className="space-y-4">
                         <button
                             type="button"
@@ -353,15 +354,7 @@ export function Sidebar({
                                             (item) =>
                                                 item.grupo === grupo.clave
                                         );
-
-                                        // En "Comercial y ventas" mostramos los módulos
-                                        // reales (clicables), junto a futuros deshabilitados.
-                                        const habilitados =
-                                            grupo.clave === "comercial"
-                                                ? comercialesPlegables
-                                                : [];
-
-                                        if (delGrupo.length === 0 && habilitados.length === 0) {
+                                        if (delGrupo.length === 0) {
                                             return null;
                                         }
 
@@ -372,7 +365,6 @@ export function Sidebar({
                                                 </TituloGrupo>
 
                                                 <div className="space-y-1">
-                                                    {habilitados.map(renderItem)}
                                                     {delGrupo.map(renderFuturo)}
                                                 </div>
                                             </section>

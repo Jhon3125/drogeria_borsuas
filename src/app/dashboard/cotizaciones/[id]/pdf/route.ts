@@ -14,7 +14,7 @@ const PALE = rgb(0.94, 0.97, 0.99);
 const WIDTH = 595.28;
 const HEIGHT = 841.89;
 const MARGIN = 44;
-const MONEY = (value: number) => `S/ ${value.toFixed(2)}`;
+const MONEY = (value: number, moneda: "PEN" | "USD") => `${moneda === "USD" ? "US$" : "S/"} ${value.toFixed(2)}`;
 const cents = (value: { toString(): string }) => Math.round(Number(value.toString()) * 100);
 const clean = (value: string) => value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
 
@@ -67,15 +67,16 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) {
     return new NextResponse("Identificador inválido", { status: 400 });
   }
-  const venta = await prisma.venta.findFirst({
-    where: { id: Number(id), etapa: "COTIZACION" },
+  const cotizacion = await prisma.cotizacion.findFirst({
+    where: { id: Number(id), ...(usuario.rol === "COMERCIAL" ? { vendedorId: usuarioId } : {}) },
     include: {
       cliente: { select: { razonSocial: true, documento: true, direccion: true, correo: true, telefono: true } },
       detalles: { orderBy: { id: "asc" }, include: { producto: { select: { nombre: true, codigo: true, unidadMedida: true } } } },
     },
   });
-  if (!venta) return new NextResponse("Cotización no encontrada", { status: 404 });
-  const numeroCotizacion = `COT-${String(venta.id).padStart(5, "0")}`;
+  if (!cotizacion) return new NextResponse("Cotización no encontrada", { status: 404 });
+  const moneda = cotizacion.moneda;
+  const numeroCotizacion = `COT-${String(cotizacion.id).padStart(5, "0")}`;
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Cotización ${numeroCotizacion}`);
@@ -85,7 +86,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   let page = pdf.addPage([WIDTH, HEIGHT]);
   let y = HEIGHT - 51;
   let pageNum = 1;
-  const issueDate = new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", day: "2-digit", month: "2-digit", year: "numeric" }).format(venta.fecha);
+  const issueDate = new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", day: "2-digit", month: "2-digit", year: "numeric" }).format(cotizacion.fecha);
 
   function footer(p: PDFPage, number: number) {
     p.drawLine({ start: { x: MARGIN, y: 50 }, end: { x: WIDTH - MARGIN, y: 50 }, thickness: 0.7, color: rgb(0.82, 0.86, 0.9) });
@@ -117,17 +118,17 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   header(page, false);
   y = HEIGHT - 129;
   text(page, "CLIENTE", MARGIN, y, bold, 9, BLUE);
-  text(page, venta.cliente.razonSocial, MARGIN, y - 19, bold, 12, INK, 345);
-  text(page, `DNI/RUC: ${venta.cliente.documento}`, MARGIN, y - 35, regular, 9, MUTED);
-  if (venta.cliente.direccion) text(page, `Dirección: ${venta.cliente.direccion}`, MARGIN, y - 50, regular, 9, MUTED, 355);
+  text(page, cotizacion.cliente.razonSocial, MARGIN, y - 19, bold, 12, INK, 345);
+  text(page, `DNI/RUC: ${cotizacion.cliente.documento}`, MARGIN, y - 35, regular, 9, MUTED);
+  if (cotizacion.cliente.direccion) text(page, `Dirección: ${cotizacion.cliente.direccion}`, MARGIN, y - 50, regular, 9, MUTED, 355);
   text(page, `Fecha: ${issueDate}`, 418, y - 19, regular, 9, INK);
-  text(page, "Moneda: PEN (S/)", 418, y - 35, regular, 9, INK);
+  text(page, moneda === "USD" ? "Moneda: USD (US$)" : "Moneda: PEN (S/)", 418, y - 35, regular, 9, INK);
   y -= 95;
   page.drawLine({ start: { x: MARGIN, y }, end: { x: WIDTH - MARGIN, y }, thickness: 0.7, color: rgb(0.82, 0.86, 0.9) });
   y -= 26;
   tableHeader();
   let itemTotalCents = 0;
-  for (const item of venta.detalles) {
+  for (const item of cotizacion.detalles) {
     const unitCents = cents(item.precioUnitario);
     const itemDiscountCents = cents(item.descuento);
     const amount = unitCents * item.cantidad - itemDiscountCents;
@@ -138,9 +139,9 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     if (y - rowHeight < 133) newPage();
     lines.forEach((line, index) => text(page, line, MARGIN + 8, y - index * 13, regular, 9, INK));
     right(page, String(item.cantidad), 408, y, regular, 9);
-    right(page, MONEY(unitCents / 100), 479, y, regular, 9);
-    right(page, MONEY(amount / 100), WIDTH - MARGIN - 7, y, regular, 9);
-    if (itemDiscountCents > 0) text(page, `Descuento línea: ${MONEY(itemDiscountCents / 100)}`, MARGIN + 8, y - 13 * lines.length, regular, 8, MUTED);
+    right(page, MONEY(unitCents / 100, moneda), 479, y, regular, 9);
+    right(page, MONEY(amount / 100, moneda), WIDTH - MARGIN - 7, y, regular, 9);
+    if (itemDiscountCents > 0) text(page, `Descuento línea: ${MONEY(itemDiscountCents / 100, moneda)}`, MARGIN + 8, y - 13 * lines.length, regular, 8, MUTED);
     y -= rowHeight + (itemDiscountCents > 0 ? 12 : 0);
     page.drawLine({ start: { x: MARGIN, y: y + 9 }, end: { x: WIDTH - MARGIN, y: y + 9 }, thickness: 0.4, color: rgb(0.88, 0.9, 0.92) });
   }
@@ -148,14 +149,14 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     footer(page, pageNum);
     page = pdf.addPage([WIDTH, HEIGHT]); pageNum++; header(page, true); y = HEIGHT - 155;
   }
-  const subtotal = cents(venta.subtotal);
-  const discount = cents(venta.descuento);
-  const total = cents(venta.importeTotal);
+  const subtotal = cents(cotizacion.subtotal);
+  const discount = cents(cotizacion.descuento);
+  const total = cents(cotizacion.importeTotal);
   // Display the stored totals, not recalculations based on current catalog prices.
   const totals = [
-    ["Subtotal", MONEY(subtotal / 100)],
-    ["Descuento general", `- ${MONEY(discount / 100)}`],
-    ["TOTAL COTIZADO", MONEY(total / 100)],
+    ["Subtotal", MONEY(subtotal / 100, moneda)],
+    ["Descuento general", `- ${MONEY(discount / 100, moneda)}`],
+    ["TOTAL COTIZADO", MONEY(total / 100, moneda)],
   ];
   y -= 12;
   totals.forEach(([label, value], index) => {
@@ -165,7 +166,27 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     right(page, value, WIDTH - MARGIN - 7, y, isTotal ? bold : regular, isTotal ? 11 : 9, isTotal ? BLUE : INK);
     y -= isTotal ? 36 : 25;
   });
-  if (y > 115) text(page, "Cotización sujeta a confirmación comercial y disponibilidad de stock.", MARGIN, y - 12, regular, 9, MUTED, WIDTH - 2 * MARGIN);
+  const condiciones = [
+    cotizacion.validezHasta ? `Válida hasta: ${new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(cotizacion.validezHasta)}` : null,
+    cotizacion.condicionPago ? `Condición de pago: ${cotizacion.condicionPago}` : null,
+    cotizacion.plazoEntrega ? `Plazo de entrega: ${cotizacion.plazoEntrega}` : null,
+    cotizacion.observaciones ? `Observaciones: ${cotizacion.observaciones}` : null,
+  ].filter((x): x is string => Boolean(x));
+  if (condiciones.length) {
+    if (y < 145) {
+      footer(page, pageNum);
+      page = pdf.addPage([WIDTH, HEIGHT]); pageNum++; header(page, true); y = HEIGHT - 140;
+    }
+    y -= 10;
+    text(page, "CONDICIONES COMERCIALES", MARGIN, y, bold, 9, BLUE); y -= 18;
+    for (const condicion of condiciones) {
+      for (const line of splitLines(condicion, regular, 9, WIDTH - MARGIN * 2)) {
+        if (y < 82) { footer(page, pageNum); page = pdf.addPage([WIDTH, HEIGHT]); pageNum++; header(page, true); y = HEIGHT - 135; }
+        text(page, line, MARGIN, y, regular, 9, INK); y -= 14;
+      }
+    }
+  }
+  if (y > 90) text(page, "Propuesta sujeta a confirmación comercial y disponibilidad de stock.", MARGIN, y - 12, regular, 9, MUTED, WIDTH - 2 * MARGIN);
   footer(page, pageNum);
   const bytes = await pdf.save();
   return new NextResponse(new Uint8Array(bytes), {
