@@ -127,13 +127,14 @@ export type CotizacionBase = {
   items: { productoId: number; cantidad: number; precioUnitario: string; descuento: string }[];
 };
 
-export function CotizacionForm({ clientes, productos, clienteInicial, oportunidadId, onGuardado, onCancelar, revision }: {
+export function CotizacionForm({ clientes, productos, clienteInicial, oportunidadId, onGuardado, onCancelar, onCrearCliente, revision }: {
   clientes: Cliente[];
   productos: Producto[];
   clienteInicial?: number;
   oportunidadId?: number;
   onGuardado?: () => void;
   onCancelar?: () => void;
+  onCrearCliente?: () => void;
   revision?: CotizacionBase;
 }) {
   const router = useRouter();
@@ -166,7 +167,7 @@ export function CotizacionForm({ clientes, productos, clienteInicial, oportunida
   useEffect(() => {
     if (!estado?.ok || notificado.current) return;
     notificado.current = true;
-    if (onGuardado) onGuardado(); else router.refresh();
+    if (onGuardado) onGuardado(); else { router.replace("/dashboard/cotizaciones"); router.refresh(); }
   }, [estado?.ok, onGuardado, router]);
 
   return <form action={accion} className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -179,7 +180,13 @@ export function CotizacionForm({ clientes, productos, clienteInicial, oportunida
 
       <section className="space-y-3"><h3 className="flex items-center gap-2 text-sm font-bold text-[#123E70]"><CalendarDays className="h-4 w-4" /> Datos comerciales</h3>
         <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Cliente *<select required value={clienteId} disabled={Boolean(oportunidadId || revision)} onChange={(e) => setClienteId(Number(e.target.value))} className={input}><option value={0}>Seleccionar cliente</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.razonSocial}</option>)}</select></label>
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="cliente-cotizacion" className="text-xs font-semibold text-slate-700">Cliente *</label>
+              {onCrearCliente && !revision && !oportunidadId && <button type="button" onClick={onCrearCliente} className="inline-flex items-center gap-1 text-xs font-semibold text-[#087EBD] hover:underline"><Plus className="h-3.5 w-3.5"/> Crear cliente</button>}
+            </div>
+            <select id="cliente-cotizacion" required value={clienteId} disabled={Boolean(oportunidadId || revision)} onChange={(e) => setClienteId(Number(e.target.value))} className={input}><option value={0}>Seleccionar cliente calificado</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.razonSocial}</option>)}</select>
+          </div>
           <div className="rounded-lg bg-slate-50 px-3 py-2.5"><p className="text-xs text-slate-500">Moneda</p><p className="mt-1 text-sm font-semibold">{moneda === "USD" ? "USD · Dólares" : "PEN · Soles"}</p></div>
           <label className="text-xs font-semibold text-slate-700">Validez hasta<input type="date" value={validezHasta} onChange={(e) => setValidezHasta(e.target.value)} className={input}/></label>
         </div>
