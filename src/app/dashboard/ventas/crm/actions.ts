@@ -438,11 +438,30 @@ export async function cambiarEtapaOportunidad(
 
       }
 
-      if (oportunidad.etapa === "GANADA" || oportunidad.etapa === "PERDIDA") throw new Error("Una oportunidad cerrada no puede cambiar de etapa.");
-        if (ORDEN_ETAPAS[x.etapaNueva] < ORDEN_ETAPAS[oportunidad.etapa]) throw new Error("No se permite retroceder a una etapa comercial anterior.");
-        if (x.etapaNueva !== "PERDIDA" && x.etapaNueva !== "GANADA" && ORDEN_ETAPAS[x.etapaNueva] !== ORDEN_ETAPAS[oportunidad.etapa] + 1) throw new Error("Solo puedes avanzar a la siguiente etapa comercial.");
-        if (x.etapaNueva === "GANADA" && oportunidad.etapa !== "NEGOCIACION") throw new Error("Solo se puede marcar como ganada una oportunidad en Negociación.");
+      if (oportunidad.etapa === "GANADA" || oportunidad.etapa === "PERDIDA") {
+        throw new Error("Una oportunidad cerrada no puede cambiar de etapa.");
+      }
 
+      // Impedir retroceder a etapas anteriores
+      if (ORDEN_ETAPAS[x.etapaNueva] < ORDEN_ETAPAS[oportunidad.etapa]) {
+        throw new Error("No se permite retroceder a una etapa comercial anterior.");
+      }
+
+      // Impedir saltarse etapas
+      if (
+        x.etapaNueva !== "PERDIDA" &&
+        x.etapaNueva !== "GANADA" &&
+        ORDEN_ETAPAS[x.etapaNueva] !== ORDEN_ETAPAS[oportunidad.etapa] + 1
+      ) {
+        throw new Error("Solo puedes avanzar a la siguiente etapa comercial.");
+      }
+
+      // NUEVO: impedir cerrar una oportunidad como Ganada manualmente
+      if (x.etapaNueva === "GANADA") {
+        throw new Error(
+          "Convierte una cotización aceptada en venta para marcar la oportunidad como Ganada."
+        );
+      }
       if (oportunidad.etapa !== x.etapaEsperada) {
 
         throw new Error("La etapa cambió desde que abriste el tablero. Actualiza la página.");
@@ -491,7 +510,7 @@ export async function cambiarEtapaOportunidad(
 
 
 
-      
+
 
 
 
@@ -505,7 +524,7 @@ export async function cambiarEtapaOportunidad(
 
           etapa: x.etapaNueva,
 
-          fechaCierre: x.etapaNueva === "GANADA" || x.etapaNueva === "PERDIDA" ? new Date() : null,
+          fechaCierre: x.etapaNueva === "PERDIDA" ? new Date() : null,
 
           motivoPerdida: x.etapaNueva === "PERDIDA" ? x.comentario : null,
 
@@ -558,10 +577,10 @@ export async function cambiarEtapaOportunidad(
         "Primero registra el contacto y avanza a Contactado.",
 
         "Registra un contacto efectivo y califica el cliente antes de avanzar a Contactado.",
-          "No se permite retroceder a una etapa comercial anterior.",
-          "Una oportunidad cerrada no puede cambiar de etapa.",
-          "Solo puedes avanzar a la siguiente etapa comercial.",
-          "Solo se puede marcar como ganada una oportunidad en Negociación.",
+        "No se permite retroceder a una etapa comercial anterior.",
+        "Una oportunidad cerrada no puede cambiar de etapa.",
+        "Solo puedes avanzar a la siguiente etapa comercial.",
+        "Convierte una cotización aceptada en venta para marcar la oportunidad como Ganada.",
 
       ].includes(error.message) ? error.message : "No se pudo cambiar la etapa."
 

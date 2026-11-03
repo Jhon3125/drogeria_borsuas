@@ -91,10 +91,28 @@ export async function crearCotizacion(_: EstadoCotizacion, form: FormData): Prom
     await prisma.$transaction(async (tx) => {
       const clienteActual = await tx.cliente.findUnique({
         where: { id: clienteId },
-        select: { estado: true, estadoRelacionComercial: true },
+        select: { estado: true, estadoRelacionComercial: true, razonSocial: true },
       });
       if (!clienteActual?.estado || clienteActual.estadoRelacionComercial !== "CALIFICADO") {
         throw new Error("El cliente debe estar activo y calificado para registrar cotizaciones.");
+      }
+      // Una cotización independiente inicia una nueva oportunidad comercial.
+      // No se inventa un contacto ni se modifica la calificación del cliente.
+      let oportunidadDestinoId: number | null = oportunidadId ?? null;
+      if (oportunidadDestinoId !== null) {
+        const vinculada = await tx.oportunidadComercial.findUnique({
+          where: { id: oportunidadDestinoId },
+          select: { clienteId: true, vendedorId: true, etapa: true },
+        });
+        if (!vinculada || vinculada.clienteId !== clienteId) {
+          throw new Error("La oportunidad no corresponde al cliente.");
+        }
+        if (["PROSPECTO", "GANADA", "PERDIDA"].includes(vinculada.etapa)) {
+          throw new Error("La oportunidad no permite registrar cotizaciones.");
+        }
+        if (usuario.rol === "COMERCIAL" && vinculada.vendedorId !== Number(usuario.id)) {
+          throw new Error("No tienes permisos sobre esta oportunidad.");
+        }
       }
       let version = 1;
       let cotizacionAnteriorId: number | null = null;
@@ -116,10 +134,34 @@ export async function crearCotizacion(_: EstadoCotizacion, form: FormData): Prom
         }
         version = anterior.version + 1;
         cotizacionAnteriorId = anterior.id;
+        // Las revisiones respetan el vínculo histórico; no crean nuevas oportunidades.
+      } else if (oportunidadDestinoId === null) {
+        const titulo = `Propuesta comercial · ${clienteActual.razonSocial}`.slice(0, 180);
+        const creada = await tx.oportunidadComercial.create({
+          data: {
+            titulo,
+            clienteId,
+            vendedorId: Number(usuario.id),
+            etapa: "COTIZACION",
+            moneda,
+            montoEstimado: (totalCent / 100).toFixed(2),
+            descripcion: "Oportunidad creada al registrar una cotización desde el módulo Cotizaciones para un cliente calificado.",
+            historial: {
+              create: {
+                usuarioId: Number(usuario.id),
+                etapaAnterior: null,
+                etapaNueva: "COTIZACION",
+                comentario: "Oportunidad creada desde Cotizaciones. Cliente previamente calificado.",
+              },
+            },
+          },
+          select: { id: true },
+        });
+        oportunidadDestinoId = creada.id;
       }
       await tx.cotizacion.create({
         data: {
-          clienteId, vendedorId: Number(usuario.id), oportunidadId: oportunidadId ?? null,
+          clienteId, vendedorId: Number(usuario.id), oportunidadId: oportunidadDestinoId,
           version, cotizacionAnteriorId,
           estado: "BORRADOR", moneda, validezHasta: fechaValidez,
           condicionPago: condicionPago?.trim() || null,
@@ -148,12 +190,15 @@ export async function crearCotizacion(_: EstadoCotizacion, form: FormData): Prom
       "Sin permisos para revisar la cotización.",
       "La revisión debe conservar el cliente, la oportunidad y la moneda de origen.",
       "El cliente debe estar activo y calificado para registrar cotizaciones.",
+      "La oportunidad no corresponde al cliente.",
+      "La oportunidad no permite registrar cotizaciones.",
+      "No tienes permisos sobre esta oportunidad.",
     ];
     return { error: permitidos.includes(mensaje) ? mensaje : "No se pudo registrar la nueva versión. Actualiza la página e inténtalo otra vez." };
   }
   revalidatePath("/dashboard/cotizaciones");
   revalidatePath("/dashboard/ventas/crm");
-  return { ok: revisarCotizacionId ? "Nueva versión guardada como borrador. La propuesta original se conserva." : "Cotización guardada como borrador. No se reservó ni descontó stock." };
+  return { ok: revisarCotizacionId ? "Nueva versión guardada como borrador. La propuesta original se conserva." : "Cotización guardada como borrador y vinculada a su oportunidad comercial. No se reservó ni descontó stock." };
 }
 
 // Transiciones formales de la propuesta. No crean venta ni modifican inventario.
