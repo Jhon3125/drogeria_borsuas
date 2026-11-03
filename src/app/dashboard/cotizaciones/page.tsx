@@ -2,25 +2,68 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ROLES_COMERCIAL } from "@/lib/comercial-roles";
-import { CotizacionForm, type CotizacionBase } from "./form";
-import { AccionesEstadoCotizacion } from "./acciones-estado";
-import { EstadoCotizacionBadge } from "./estado-badge";
+import { type CotizacionBase } from "./form";
+import { CotizacionPanel } from "./cotizacion-panel";
+import { FileText, Columns3, CheckCircle2, Clock3, FileClock } from "lucide-react";
+import { TablaCotizaciones } from "./tabla-cotizaciones";
+import type { Prisma } from "@/generated/prisma/client";
 
-type Props = { searchParams: Promise<{ oportunidadId?: string; revisar?: string }> };
+type Props = { searchParams: Promise<{ oportunidadId?: string; revisar?: string; nueva?: string; q?: string; estado?: string; moneda?: string; pagina?: string; porPagina?: string }> };
+const idSeguro = (valor?: string) => valor && /^\d+$/.test(valor) && Number.isSafeInteger(Number(valor)) && Number(valor) > 0 ? Number(valor) : null;
+
 export default async function CotizacionesPage({ searchParams }: Props) {
   const usuario = await exigirRol(ROLES_COMERCIAL);
-  const { oportunidadId: rawId, revisar: rawRevision } = await searchParams;
-  const revisarId = rawRevision && /^\d+$/.test(rawRevision) && Number.isSafeInteger(Number(rawRevision)) ? Number(rawRevision) : null;
-  const oportunidadId = rawId && /^\d+$/.test(rawId) && Number.isSafeInteger(Number(rawId)) ? Number(rawId) : null;
-  const [clientes, productos, cotizaciones, oportunidad, anterior] = await Promise.all([
-    prisma.cliente.findMany({ where: { estado: true }, select: { id: true, razonSocial: true }, orderBy: { razonSocial: "asc" } }),
+  const { oportunidadId: rawId, revisar: rawRevision, nueva, q: rawQ, estado: rawEstado, moneda: rawMoneda, pagina: rawPagina, porPagina: rawPorPagina } = await searchParams;
+  const q = (rawQ ?? "").trim().slice(0, 100);
+  const estados = ["BORRADOR", "EMITIDA", "ACEPTADA", "RECHAZADA", "VENCIDA", "ANULADA"] as const;
+  const estado = estados.find(e => e === rawEstado) ?? "TODOS";
+  const moneda = rawMoneda === "PEN" || rawMoneda === "USD" ? rawMoneda : "TODAS";
+  const porPagina = [10, 20, 50].includes(Number(rawPorPagina)) ? Number(rawPorPagina) : 10;
+  const paginaSolicitada = Math.max(1, Math.min(100000, Number.isSafeInteger(Number(rawPagina)) ? Number(rawPagina) : 1));
+  const oportunidadId = idSeguro(rawId);
+  const revisarId = idSeguro(rawRevision);
+  const mostrarFormulario = nueva === "1" || oportunidadId !== null || revisarId !== null;
+  const filtro = usuario.rol === "COMERCIAL" ? { vendedorId: Number(usuario.id) } : {};
+  const busquedaCondiciones: Prisma.CotizacionWhereInput[] = [
+    { cliente: { razonSocial: { contains: q, mode: "insensitive" } } },
+    { vendedor: { nombre: { contains: q, mode: "insensitive" } } },
+  ];
+  const referencia = q.match(/^(COT-|OP-)?(\d+)$/i);
+  if (referencia && Number.isSafeInteger(Number(referencia[2]))) {
+    const numero = Number(referencia[2]);
+    if (referencia[1]?.toUpperCase() === "OP-") {
+      busquedaCondiciones.push({ oportunidadId: numero });
+    } else if (referencia[1]?.toUpperCase() === "COT-") {
+      busquedaCondiciones.push({ id: numero });
+    } else {
+      busquedaCondiciones.push({ id: numero }, { oportunidadId: numero });
+    }
+  }
+  const condiciones: Prisma.CotizacionWhereInput = {
+    ...filtro,
+    ...(estado !== "TODOS" ? { estado } : {}),
+    ...(moneda !== "TODAS" ? { moneda } : {}),
+    ...(q ? { OR: busquedaCondiciones } : {}),
+  };
+  const totalCotizaciones = await prisma.cotizacion.count({ where: condiciones });
+  const paginas = Math.max(1, Math.ceil(totalCotizaciones / porPagina));
+  const pagina = Math.min(paginaSolicitada, paginas);
+  const [clientes, productos, cotizaciones, oportunidad, anterior, agrupacion] = await Promise.all([
+    prisma.cliente.findMany({ where: { estado: true, estadoRelacionComercial: "CALIFICADO" }, select: { id: true, razonSocial: true }, orderBy: { razonSocial: "asc" } }),
     prisma.producto.findMany({ where: { estado: true }, select: { id: true, codigo: true, nombre: true, precioVenta: true, moneda: true }, orderBy: { nombre: "asc" } }),
-    prisma.cotizacion.findMany({ where: usuario.rol === "COMERCIAL" ? { vendedorId: Number(usuario.id) } : {}, orderBy: { fecha: "desc" }, take: 50, include: { cotizacionAnterior: { select: { id: true } }, revisionSiguiente: { select: { id: true } }, cliente: { select: { razonSocial: true } }, detalles: { include: { producto: { select: { nombre: true } } } }, oportunidad: { select: { id: true } } } }),
+    prisma.cotizacion.findMany({ where: condiciones, orderBy: [{ fecha: "desc" }, { id: "desc" }], skip: (pagina - 1) * porPagina, take: porPagina, include: {
+      cotizacionAnterior: { select: { id: true } }, revisionSiguiente: { select: { id: true } },
+      cliente: { select: { razonSocial: true } }, vendedor: { select: { nombre: true } },
+      detalles: { include: { producto: { select: { nombre: true, codigo: true } } } },
+      oportunidad: { select: { id: true, etapa: true } }, venta: { select: { id: true } },
+    } }),
     oportunidadId ? prisma.oportunidadComercial.findUnique({ where: { id: oportunidadId }, select: { id: true, clienteId: true, vendedorId: true, etapa: true } }) : Promise.resolve(null),
     revisarId ? prisma.cotizacion.findUnique({ where: { id: revisarId }, include: { detalles: true, revisionSiguiente: { select: { id: true } }, oportunidad: { select: { etapa: true, vendedorId: true } } } }) : Promise.resolve(null),
+    prisma.cotizacion.groupBy({ by: ["estado"], where: filtro, _count: { _all: true } }),
   ]);
-  const puedeVincular = oportunidad && oportunidad.etapa !== "PROSPECTO" && oportunidad.etapa !== "GANADA" && oportunidad.etapa !== "PERDIDA" && (usuario.rol !== "COMERCIAL" || oportunidad.vendedorId === Number(usuario.id));
-  const idInicial = puedeVincular ? oportunidad.clienteId : undefined;
+  const contar = (estado: string) => agrupacion.find(g => g.estado === estado)?._count._all ?? 0;
+  const puedeVincular = oportunidad && !["PROSPECTO", "GANADA", "PERDIDA"].includes(oportunidad.etapa) &&
+    (usuario.rol !== "COMERCIAL" || oportunidad.vendedorId === Number(usuario.id));
   const revisionValida = anterior && anterior.estado === "RECHAZADA" && !anterior.revisionSiguiente &&
     (usuario.rol !== "COMERCIAL" || (anterior.vendedorId === Number(usuario.id) && (!anterior.oportunidad || anterior.oportunidad.vendedorId === Number(usuario.id)))) &&
     (!anterior.oportunidad || !["PROSPECTO", "GANADA", "PERDIDA"].includes(anterior.oportunidad.etapa));
@@ -32,20 +75,80 @@ export default async function CotizacionesPage({ searchParams }: Props) {
     items: anterior.detalles.map((d) => ({ productoId: d.productoId, cantidad: d.cantidad,
       precioUnitario: d.precioUnitario.toFixed(2), descuento: d.descuento.toFixed(2) })),
   } : undefined;
-  return <div className="space-y-6">
-    <header><h1 className="text-3xl font-bold text-[#123E70]">Cotizaciones</h1><p className="text-slate-600">Propuestas comerciales independientes de las ventas.</p></header>
-    {revisarId && !revision && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">La propuesta no se puede revisar: verifica el estado, los permisos o si ya tiene una versión posterior.</p>}
-    {!revisarId && oportunidadId && !puedeVincular && <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm">No se puede vincular una cotización a esa oportunidad.</p>}
-    {clientes.length === 0 && <p className="rounded-lg border bg-amber-50 p-4">Registra primero un cliente en <Link href="/dashboard/clientes" className="underline">Clientes</Link>.</p>}
-    {(!revisarId && (!oportunidadId || puedeVincular) || Boolean(revision)) && <CotizacionForm key={revision?.id ?? "nueva"} revision={revision} clientes={clientes} productos={productos.map((p) => ({ ...p, precioVenta: p.precioVenta.toFixed(2) }))} clienteInicial={revision?.clienteId ?? idInicial} oportunidadId={revision?.oportunidadId ?? (puedeVincular ? oportunidad.id : undefined)} />}
-    <section className="space-y-3"><h2 className="text-xl font-bold text-[#123E70]">Cotizaciones recientes</h2>
-      {cotizaciones.map((c) => <article key={c.id} className="rounded-xl border bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">COT-{String(c.id).padStart(5, "0")} · {c.cliente.razonSocial}</h3><p className="text-sm text-slate-500">{c.fecha.toLocaleDateString("es-PE")} · v{c.version}{c.oportunidad && ` · OP-${String(c.oportunidad.id).padStart(4, "0")}`}</p><div className="mt-2"><EstadoCotizacionBadge estado={c.estado} /></div></div>
-          <div className="flex flex-wrap items-center gap-3"><AccionesEstadoCotizacion cotizacionId={c.id} estado={c.estado} />{c.estado === "RECHAZADA" && !c.revisionSiguiente && <Link href={`/dashboard/cotizaciones?revisar=${c.id}`} className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-[#123E70] hover:bg-sky-100">Crear versión v{c.version + 1}</Link>}<b className="text-[#123E70]">{c.moneda === "USD" ? "US$" : "S/"} {c.importeTotal.toFixed(2)}</b><a href={`/dashboard/cotizaciones/${c.id}/pdf`} className="rounded-lg border border-[#123E70] px-3 py-2 text-sm font-semibold text-[#123E70] hover:bg-blue-50">Descargar PDF</a></div></div>
-        {c.cotizacionAnterior && <p className="mt-2 text-xs text-sky-700">Revisión de COT-{String(c.cotizacionAnterior.id).padStart(5, "0")}</p>}{c.revisionSiguiente && <p className="mt-2 text-xs text-slate-600">Tiene una revisión posterior: COT-{String(c.revisionSiguiente.id).padStart(5, "0")}</p>}
-        <ul className="mt-3 space-y-1 text-sm text-slate-600">{c.detalles.map((d) => <li key={d.id}>{d.producto.nombre} · {d.cantidad} × {c.moneda === "USD" ? "US$" : "S/"} {d.precioUnitario.toFixed(2)}</li>)}</ul>
-      </article>)}
-      {cotizaciones.length === 0 && <div className="rounded-lg border bg-white p-8 text-center text-slate-500">Todavía no hay cotizaciones.</div>}
-    </section>
-  </div>;
+  const permitirFormulario = mostrarFormulario && (revisarId ? Boolean(revision) : (!oportunidadId || Boolean(puedeVincular)));
+  const cifras = [
+    { etiqueta: "Borradores", numero: contar("BORRADOR"), icono: FileClock, color: "bg-slate-100 text-slate-700" },
+    { etiqueta: "Emitidas", numero: contar("EMITIDA"), icono: Clock3, color: "bg-sky-100 text-sky-700" },
+    { etiqueta: "Aceptadas", numero: contar("ACEPTADA"), icono: CheckCircle2, color: "bg-emerald-100 text-emerald-700" },
+    { etiqueta: "Rechazadas", numero: contar("RECHAZADA"), icono: FileText, color: "bg-rose-100 text-rose-700" },
+  ];
+
+  return <main className="mx-auto max-w-[1650px] space-y-6 pb-10">
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div><p className="mb-1 text-xs font-medium text-slate-500">Comercial y ventas / Propuestas</p>
+        <h1 className="text-3xl font-bold text-[#123E70]">Cotizaciones</h1>
+        <p className="mt-1 text-sm text-slate-600">Emite, negocia y versiona propuestas; cada nueva propuesta directa genera una oportunidad en Cotización.</p>
+      </div>
+      <div className="flex gap-2">
+        <Link href="/dashboard/ventas/crm" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-[#123E70] hover:bg-slate-50"><Columns3 className="h-4 w-4" /> Oportunidades</Link>
+        <CotizacionPanel
+          clientes={clientes}
+          productos={productos.map(p => ({ ...p, precioVenta: p.precioVenta.toFixed(2) }))}
+          revision={revision}
+          clienteInicial={revision?.clienteId ?? (puedeVincular ? oportunidad.clienteId : undefined)}
+          oportunidadId={revision?.oportunidadId ?? (puedeVincular ? oportunidad.id : undefined)}
+          abrirInicialmente={Boolean(permitirFormulario)}
+          titulo={revision ? `Crear versión v${revision.version + 1}` : "Nueva cotización"}
+        />
+      </div>
+    </header>
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{cifras.map(c => <div key={c.etiqueta} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`rounded-xl p-3 ${c.color}`}><c.icono className="h-5 w-5" /></div><div><p className="text-xs text-slate-500">{c.etiqueta}</p><p className="text-2xl font-bold text-[#123E70]">{c.numero}</p></div></div>)}</section>
+
+    {revisarId && !revision && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No se puede revisar la cotización: verifica su estado, los permisos y que no exista una versión posterior.</p>}
+    {oportunidadId && !puedeVincular && !revisarId && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">La oportunidad no admite una nueva cotización.</p>}
+    {clientes.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No hay clientes calificados. Completa la calificación de un prospecto antes de cotizar.</p>}
+
+
+    <TablaCotizaciones
+      filas={cotizaciones.map(c => ({
+        id: c.id, version: c.version, cliente: c.cliente.razonSocial, vendedor: c.vendedor.nombre,
+        fecha: c.fecha.toISOString(), estado: c.estado, moneda: c.moneda,
+        total: Number(c.importeTotal), productos: c.detalles.length,
+        oportunidadId: c.oportunidad?.id ?? null,
+        etapaOportunidad: c.oportunidad?.etapa ?? null,
+        cotizacionAnteriorId: c.cotizacionAnterior?.id ?? null,
+        revisionSiguienteId: c.revisionSiguiente?.id ?? null,
+        ventaId: c.venta?.id ?? null,
+        detalle: {
+          id: c.id,
+          version: c.version,
+          estado: c.estado,
+          moneda: c.moneda,
+          importeTotal: c.importeTotal.toFixed(2),
+          fecha: c.fecha.toISOString(),
+          validezHasta: c.validezHasta?.toISOString() ?? null,
+          revision: {
+            id: c.id,
+            version: c.version,
+            clienteId: c.clienteId,
+            oportunidadId: c.oportunidadId,
+            descuento: c.descuento.toFixed(2),
+            observaciones: c.observaciones ?? "",
+            condicionPago: c.condicionPago ?? "",
+            plazoEntrega: c.plazoEntrega ?? "",
+            validezHasta: c.validezHasta?.toISOString().slice(0, 10) ?? "",
+            items: c.detalles.map(d => ({
+              productoId: d.productoId,
+              cantidad: d.cantidad,
+              precioUnitario: d.precioUnitario.toFixed(2),
+              descuento: d.descuento.toFixed(2),
+            })),
+          },
+        },
+      }))}
+      productos={productos.map(p => ({ id: p.id, codigo: p.codigo, nombre: p.nombre }))}
+      total={totalCotizaciones}
+      filtros={{ q, estado, moneda, pagina, porPagina }}
+    />
+  </main>;
 }

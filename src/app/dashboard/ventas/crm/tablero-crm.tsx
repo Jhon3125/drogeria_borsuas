@@ -1,9 +1,10 @@
 "use client";
-
+import { QuickAction } from "./quick-action";
+import { DetalleCotizacionDrawer, type CotizacionVista } from "./detalle-cotizacion-drawer";
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { ArrowRight, CalendarDays, CircleDollarSign, GripVertical, Plus, Search, UserRound, X, Columns3, Pencil, Eye, CheckCircle2, UserPlus, History, PhoneCall, UserRoundPen, Phone, CircleX, FileText } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleDollarSign, GripVertical, Plus, ScrollText, Search, UserRound, X, Columns3, Pencil, Eye, CheckCircle2, UserPlus, History, PhoneCall, UserRoundPen, Phone, CircleX, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CotizacionForm, type CotizacionBase } from "@/app/dashboard/cotizaciones/form";
@@ -12,6 +13,7 @@ import { AccionesEstadoCotizacion } from "@/app/dashboard/cotizaciones/acciones-
 import { FormularioContacto, FormularioCalificacion, FormularioDatosProspecto } from "./formularios-prospecto";
 import { FormularioNuevoProspecto } from "./formulario-nuevo-prospecto";
 import { crearOportunidad, actualizarOportunidad, cambiarEtapaOportunidad, crearClienteDesdeCRM } from "./actions";
+import { ConvertirCotizacionAVenta } from "@/app/dashboard/cotizaciones/convertir-venta";
 
 type Etapa = "PROSPECTO" | "CONTACTADO" | "COTIZACION" | "NEGOCIACION" | "GANADA" | "PERDIDA";
 type Oportunidad = {
@@ -36,52 +38,7 @@ const SIGUIENTE: Partial<Record<Etapa, { etapa: Etapa; label: string }>> = {
   PROSPECTO: { etapa: "CONTACTADO", label: "Contactar" },
   CONTACTADO: { etapa: "COTIZACION", label: "Cotizar" },
   COTIZACION: { etapa: "NEGOCIACION", label: "Negociar" },
-  NEGOCIACION: { etapa: "GANADA", label: "Marcar ganada" },
 };
-type QuickActionProps = {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  variant?: "default" | "primary" | "success";
-};
-
-function QuickAction({
-  label,
-  icon,
-  onClick,
-  disabled = false,
-  variant = "default",
-}: QuickActionProps) {
-  const estilos = {
-    default: "border-slate-200 bg-white text-[#123E70] hover:bg-slate-50",
-    primary: "border-sky-200 bg-sky-50 text-[#087EBD] hover:bg-sky-100",
-    success: "border-[#123E70] bg-[#123E70] text-white hover:bg-[#087EBD]",
-  };
-
-  return (
-    <div className="group/accion relative">
-      <button
-        type="button"
-        draggable={false}
-        disabled={disabled}
-        onClick={onClick}
-        aria-label={label}
-        className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50 ${estilos[variant]}`}
-      >
-        {icon}
-      </button>
-
-      <div
-        role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 z-[60] mb-2 w-max max-w-48 -translate-x-1/2 rounded-md bg-slate-900 px-2.5 py-1.5 text-center text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover/accion:opacity-100 group-focus-within/accion:opacity-100"
-      >
-        {label}
-        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-      </div>
-    </div>
-  );
-}
 
 function mostrarMonto(item: Oportunidad) {
   if (!item.montoEstimado) return "Sin importe";
@@ -114,6 +71,13 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [ocupado, iniciarTransicion] = useTransition();
   const [vistaLocal, setVistaLocal] = useState<Oportunidad[]>(oportunidades);
+  const [cotizacionDetalle, setCotizacionDetalle] = useState<{
+    oportunidadId: number;
+    cotizacionId: number;
+  } | null>(null);
+
+  const oportunidadConCotizacion = vistaLocal.find(o => o.id === cotizacionDetalle?.oportunidadId);
+  const cotizacionVista = (oportunidadConCotizacion?.cotizaciones.find(c => c.id === cotizacionDetalle?.cotizacionId) ?? null) as CotizacionVista | null;
 
   useEffect(() => { setVistaLocal(oportunidades); }, [oportunidades]);
   const filtradas = useMemo(() => vistaLocal.filter((o) => {
@@ -249,51 +213,29 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                 <p className="mt-2 text-xs text-slate-500">Responsable: {o.vendedor}</p>
                 {o.cotizaciones.length > 0 && <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-sky-700"><FileText className="h-3.5 w-3.5" /> {o.cotizaciones.length} cotización(es)</p>}
                 {o.fechaSeguimiento && <p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" />Seguimiento: {o.fechaSeguimiento.split("-").reverse().join("/")}</p>}
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-
-                  <QuickAction
-                    label="Ver detalle de la oportunidad"
-                    icon={<Eye className="h-4 w-4" />}
-                    onClick={() => setDetalleId(o.id)}
-                  />
-
+                <div className="mt-3 flex flex-nowrap items-center gap-1.5 border-t border-slate-100 pt-3">
+                  <QuickAction label="Ver detalle" icon={<Eye className="h-4 w-4" />} onClick={() => setDetalleId(o.id)} />
                   {!cerrada && o.etapa === "PROSPECTO" && (
-                    <QuickAction
-                      label="Completar información del prospecto"
-                      icon={<UserPlus className="h-4 w-4" />}
-                      variant="primary"
-                      onClick={() => {
-                        setFlujoId(null);
-                        setDatosId(o.id);
-                      }}
-                    />
+                    <QuickAction label="Completar datos del prospecto" icon={<UserPlus className="h-4 w-4" />} variant="primary" onClick={() => { setFlujoId(null); setDatosId(o.id); }} />
                   )}
-
+                  {!cerrada && (
+                    <QuickAction label="Registrar contacto comercial" icon={<PhoneCall className="h-4 w-4" />} variant="primary" onClick={() => {
+                      if (o.etapa === "PROSPECTO") iniciarFlujoProspecto(o.id);
+                      else { setFlujoId(null); setContactoId(o.id); }
+                    }} />
+                  )}
                   {!cerrada && o.etapa !== "PROSPECTO" && (
-                    <QuickAction
-                      label="Crear nueva cotización"
-                      icon={<FileText className="h-4 w-4" />}
-                      variant="primary"
-                      onClick={() => abrirCotizacion(o)}
-                    />
+                    <QuickAction label="Crear cotización" icon={<FileText className="h-4 w-4" />} variant="primary" onClick={() => abrirCotizacion(o)} />
                   )}
-
+                  {o.cotizaciones.length > 0 && (
+                    <QuickAction label="Ver última cotización" icon={<ScrollText className="h-4 w-4" />} onClick={() => {
+                      const ultima = [...o.cotizaciones].sort((a, b) => b.id - a.id)[0];
+                      setCotizacionDetalle({ oportunidadId: o.id, cotizacionId: ultima.id });
+                    }} />
+                  )}
                   {!cerrada && SIGUIENTE[o.etapa] && (
-                    <QuickAction
-                      label={
-                        o.etapa === "PROSPECTO"
-                          ? "Iniciar contacto y calificación"
-                          : `Avanzar a ${SIGUIENTE[o.etapa]!.label}`
-                      }
-                      icon={<ArrowRight className="h-4 w-4" />}
-                      variant="success"
-                      disabled={ocupado}
-                      onClick={() =>
-                        solicitarMovimiento(o.id, SIGUIENTE[o.etapa]!.etapa)
-                      }
-                    />
+                    <QuickAction label={`Avanzar: ${SIGUIENTE[o.etapa]!.label}`} icon={<ArrowRight className="h-4 w-4" />} variant="success" disabled={ocupado} onClick={() => solicitarMovimiento(o.id, SIGUIENTE[o.etapa]!.etapa)} />
                   )}
-
                 </div>
                 {o.etapa === "PERDIDA" && o.motivoPerdida && <p className="mt-2 rounded-md bg-rose-50 p-2 text-xs text-rose-800">{o.motivoPerdida}</p>}
               </article>;
@@ -331,11 +273,19 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                   <span className="text-sm font-bold text-[#123E70]">{new Intl.NumberFormat("es-PE", { style: "currency", currency: c.moneda === "USD" ? "USD" : "PEN" }).format(Number(c.importeTotal))}</span>
                 </div>
                 <AccionesEstadoCotizacion cotizacionId={c.id} estado={c.estado} compacta />
+                {detalle.etapa === "NEGOCIACION" && c.estado === "ACEPTADA" && (
+                  <div className="mt-3">
+                    <ConvertirCotizacionAVenta cotizacionId={c.id} />
+                  </div>
+                )}
                 {c.estado === "RECHAZADA" && !c.tieneRevisionPosterior && !["PROSPECTO", "GANADA", "PERDIDA"].includes(detalle.etapa) && (
                   <button type="button" onClick={() => abrirRevision(detalle, c.id)} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-[#123E70] hover:bg-sky-100"><Pencil className="h-3.5 w-3.5" /> Crear versión v{c.version + 1}</button>
                 )}
                 {c.tieneRevisionPosterior && <p className="mt-2 text-xs text-slate-500">Esta propuesta ya tiene una revisión posterior.</p>}
                 <a href={`/dashboard/cotizaciones/${c.id}/pdf`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#087EBD] hover:underline"><FileText className="h-3.5 w-3.5" /> Ver PDF</a>
+                <button type="button" onClick={() => setCotizacionDetalle({ oportunidadId: detalle.id, cotizacionId: c.id })} className="mt-2 mr-3 inline-flex items-center gap-1 text-xs font-semibold text-[#123E70] hover:underline">
+                  <Eye className="h-3.5 w-3.5" /> Ver detalle
+                </button>
               </div>)}
             </div> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aún no existen cotizaciones para esta oportunidad.</p>}
           </section>
@@ -385,6 +335,12 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
     <Dialog open={modal !== null} onOpenChange={(value) => { if (!value) cerrarModal(); }}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"><DialogHeader className="space-y-3 pb-2"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-primary"><Columns3 className="h-5 w-5" /></div><DialogTitle className="text-xl">{modal === "editar" ? "Editar oportunidad" : "Nueva oportunidad"}</DialogTitle><DialogDescription>Información comercial y próxima actividad de seguimiento.</DialogDescription></DialogHeader>{modal && <FormularioOportunidad key={`${modal}-${seleccionada?.id ?? 0}`} item={modal === "editar" ? seleccionada : null} clientes={clientes} vendedores={vendedores} usuarioId={usuarioId} administrador={administrador} onCerrar={cerrarModal} onGuardado={() => { cerrarModal(); router.refresh(); }} />}</DialogContent></Dialog>
 
     <Dialog open={destino !== null} onOpenChange={(abierta) => { if (!abierta && !ocupado) { setDestino(null); setSeleccionada(null); } }}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Confirmar cambio de etapa</DialogTitle><DialogDescription>{destino === "PERDIDA" ? "Registra el motivo por el que se perdió esta oportunidad." : "Marcar esta oportunidad como ganada cerrará su negociación."}</DialogDescription></DialogHeader>{destino === "PERDIDA" && <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={2000} rows={3} className="w-full rounded-lg border p-3 text-sm" placeholder="Motivo de pérdida (obligatorio)" />}<div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={ocupado} onClick={() => { setDestino(null); setSeleccionada(null); }}>Cancelar</Button><Button type="button" disabled={ocupado || !seleccionada || !destino || (destino === "PERDIDA" && !motivo.trim())} onClick={() => { if (seleccionada && destino) realizarMovimiento(seleccionada, destino, motivo.trim()); }}>Confirmar</Button></div></DialogContent></Dialog>
+    <DetalleCotizacionDrawer
+      cotizacion={cotizacionVista}
+      cliente={oportunidadConCotizacion?.cliente ?? ""}
+      productos={productosCotizacion}
+      onCerrar={() => setCotizacionDetalle(null)}
+    />
   </main>;
 }
 
