@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { AsignarLotesForm } from "./asignar-lotes-form";
 import { VistaVentaTabs } from "./vista-venta-tabs";
+import { RegistrarCobroForm } from "./registrar-cobro-form";
 import { ArrowLeft, Clock3, FileText, PackageCheck, ShieldAlert, Truck, Wallet } from "lucide-react";
 
 const fmt = (moneda: string, valor: number) => new Intl.NumberFormat("es-PE", {
@@ -125,7 +126,8 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 font-bold text-[#123E70]"><Wallet className="h-5 w-5" /> Pagos registrados</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{estadoCobranza}</span></div>
     <div className="grid gap-3 sm:grid-cols-3"><MiniKpi nombre="Total" valor={fmt(venta.moneda, Number(venta.importeTotal))} /><MiniKpi nombre="Cobrado" valor={fmt(venta.moneda, pagado)} /><MiniKpi nombre="Por cobrar" valor={fmt(venta.moneda, saldoCalculado)} /></div>
     {venta.pagos.length ? <div className="overflow-x-auto"><table className="w-full min-w-[540px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Pago</th><th className="px-3 py-3">Fecha</th><th className="px-3 py-3">Método</th><th className="px-3 py-3 text-right">Monto</th></tr></thead><tbody className="divide-y divide-slate-100">{venta.pagos.map((p) => <tr key={p.id}><td className="px-3 py-3">#{p.id}</td><td className="px-3 py-3">{fechaTexto(p.fecha)}</td><td className="px-3 py-3">{p.metodoPago.replaceAll("_", " ")}</td><td className="px-3 py-3 text-right font-semibold">{fmt(venta.moneda, Number(p.monto))}</td></tr>)}</tbody></table></div> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Todavía no se han registrado pagos para esta venta.</p>}
-    <p className="text-xs text-slate-500">Esta pestaña es informativa; el registro de cobranzas se integrará con Caja.</p>
+    {(["SUPER_ADMIN", "ADMIN"] as string[]).includes(usuario.rol) && venta.estado !== "ANULADA" && <RegistrarCobroForm ventaId={venta.id} moneda={venta.moneda} saldo={saldoCalculado.toFixed(2)} />}
+    <p className="text-xs text-slate-500">Los cobros registrados aparecen en Caja. No equivale a un arqueo o conciliación bancaria.</p>
   </section>;
 
   const despachos = <section className={`${tarjeta} space-y-4`}>

@@ -166,6 +166,7 @@ model Usuario {
   historialOportunidades   HistorialOportunidad[] @relation("ResponsableHistorialOportunidad")
   cotizaciones             Cotizacion[]           @relation("VendedorCotizacion")
   actividadesComerciales   ActividadComercial[]   @relation("ResponsableActividadComercial")
+  cobrosRegistrados        Pago[]                 @relation("ResponsableCobro")
 }
 
 // ==========================================
@@ -434,13 +435,19 @@ model AsignacionLoteVenta {
 }
 
 model Pago {
-  id         Int        @id @default(autoincrement())
-  ventaId    Int
-  monto      Decimal    @db.Decimal(12, 2)
-  fecha      DateTime   @default(now())
-  metodoPago MetodoPago
+  id              Int        @id @default(autoincrement())
+  ventaId         Int
+  monto           Decimal    @db.Decimal(12, 2)
+  fecha           DateTime   @default(now())
+  claveOperacion  String?    @unique @db.Uuid
+  referencia      String?    @db.VarChar(120)
+  registradoPorId Int?
+  metodoPago      MetodoPago
 
-  venta Venta @relation(fields: [ventaId], references: [id])
+  registradoPor Usuario? @relation("ResponsableCobro", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  venta         Venta    @relation(fields: [ventaId], references: [id])
+
+  @@index([registradoPorId])
 }
 
 enum EstadoCotizacion {
