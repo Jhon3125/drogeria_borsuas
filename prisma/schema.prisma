@@ -427,6 +427,8 @@ model AsignacionLoteVenta {
   detalleVenta DetalleVenta @relation(fields: [detalleVentaId], references: [id], onDelete: Restrict)
   lote         Lote         @relation(fields: [loteId], references: [id], onDelete: Restrict)
 
+  detallesDespacho DetalleDespacho[]
+
   @@unique([detalleVentaId, loteId])
   @@index([loteId])
 }
@@ -615,14 +617,33 @@ model HojaRuta {
 
 model Despacho {
   id                 Int            @id @default(autoincrement())
-  hojaRutaId         Int
-  ventaId            Int            @unique
+  hojaRutaId         Int?
+  ventaId            Int
   estado             EstadoDespacho @default(PENDIENTE)
   observacion        String?
+  fechaCreacion      DateTime       @default(now())
   fechaActualizacion DateTime       @updatedAt
 
-  hojaRuta HojaRuta @relation(fields: [hojaRutaId], references: [id])
-  venta    Venta    @relation(fields: [ventaId], references: [id])
+  hojaRuta HojaRuta?         @relation(fields: [hojaRutaId], references: [id], onDelete: SetNull)
+  venta    Venta             @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  detalles DetalleDespacho[]
+
+  @@index([ventaId])
+  @@index([hojaRutaId])
+  @@index([estado])
+}
+
+model DetalleDespacho {
+  id                    Int @id @default(autoincrement())
+  despachoId            Int
+  asignacionLoteVentaId Int
+  cantidad              Int
+
+  despacho            Despacho            @relation(fields: [despachoId], references: [id], onDelete: Restrict)
+  asignacionLoteVenta AsignacionLoteVenta @relation(fields: [asignacionLoteVentaId], references: [id], onDelete: Restrict)
+
+  @@unique([despachoId, asignacionLoteVentaId])
+  @@index([asignacionLoteVentaId])
 }
 
 /// Solicitud y autorización de pago asociada a una Orden de Compra.
