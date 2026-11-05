@@ -80,6 +80,7 @@ export const NAVEGACION: ItemNav[] = [
         icono: "clipboard-check",
         grupo: "principal",
     },
+    { titulo: "Caja y cobros", href: "/dashboard/caja", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "wallet", grupo: "principal" },
     { titulo: "Clientes", href: "/dashboard/clientes", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "users-round", grupo: "comercial" },
     { titulo: "Oportunidades", href: "/dashboard/ventas/crm", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "columns", grupo: "comercial" },
     { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "comercial" },
@@ -164,12 +165,6 @@ const LOGISTICA: RolUsuario[] = [
 
 export const NAVEGACION_FUTURA: ItemNavFuturo[] = [
     // Finanzas
-    {
-        titulo: "Caja y movimientos",
-        roles: COMERCIALES,
-        grupo: "finanzas",
-        icono: "wallet",
-    },
     {
         titulo: "Gastos",
         roles: GERENCIA,
