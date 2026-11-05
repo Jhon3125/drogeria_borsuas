@@ -102,7 +102,7 @@ export function FormularioDatosProspecto({ oportunidadId, datos, onCerrar, onGua
   const enviado = useRef(false);
   useEffect(() => { if (estado?.ok && !enviado.current) { enviado.current = true; router.refresh(); onGuardado(); } }, [estado?.ok, router, onGuardado]);
   const campo = "mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200";
-  return <PortalFormulario titulo="Completar información del prospecto" descripcion="Verifica los datos antes del contacto y la calificación comercial." onCerrar={onCerrar} pendiente={pendiente}>
+  return <PortalFormulario titulo="Convertir a cliente" descripcion="Completa los datos comerciales necesarios para continuar con el contacto y la calificación." onCerrar={onCerrar} pendiente={pendiente}>
     <form action={accion} className="space-y-4">
       <input type="hidden" name="oportunidadId" value={oportunidadId} />
       <label className="block text-sm font-semibold">Razón social o nombre *<input required name="razonSocial" defaultValue={datos.razonSocial} minLength={2} maxLength={180} className={campo} /></label>

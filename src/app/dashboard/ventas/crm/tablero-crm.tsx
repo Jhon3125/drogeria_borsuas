@@ -14,6 +14,9 @@ import { FormularioContacto, FormularioCalificacion, FormularioDatosProspecto } 
 import { FormularioNuevoProspecto } from "./formulario-nuevo-prospecto";
 import { crearOportunidad, actualizarOportunidad, cambiarEtapaOportunidad, crearClienteDesdeCRM } from "./actions";
 import { ConvertirCotizacionAVenta } from "@/app/dashboard/cotizaciones/convertir-venta";
+import { datosProspectoCompletos } from "./datos-prospecto-completos";
+import Link from "next/link";
+
 
 type Etapa = "PROSPECTO" | "CONTACTADO" | "COTIZACION" | "NEGOCIACION" | "GANADA" | "PERDIDA";
 type Oportunidad = {
@@ -114,9 +117,11 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
   const cerrarModal = () => { setModal(null); setSeleccionada(null); };
   function abrirEditar(o: Oportunidad) { setSeleccionada(o); setModal("editar"); setMensaje(null); }
   function iniciarFlujoProspecto(id: number) {
+    const oportunidad = vistaLocal.find(o => o.id === id);
+    if (!oportunidad) return;
     setFlujoId(id);
-    setDatosId(id);
-    setContactoId(null);
+    setDatosId(datosProspectoCompletos(oportunidad.datosCliente) ? null : id);
+    setContactoId(datosProspectoCompletos(oportunidad.datosCliente) ? id : null);
     setCalificarId(null);
     setMensaje(null);
   }
@@ -180,7 +185,15 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
         <h1 className="flex items-center gap-2 text-2xl font-bold text-[#123E70] sm:text-3xl"><Columns3 className="h-7 w-7" /> Pipeline comercial</h1>
         <p className="mt-1 text-sm text-slate-600">Gestiona oportunidades por etapa. Los cambios quedan registrados en el historial comercial.</p>
       </div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setNuevoProspecto(true); setMensaje(null); }}><UserPlus className="mr-2 h-4 w-4" /> Nuevo prospecto</Button><Button onClick={() => { setSeleccionada(null); setModal("crear"); setMensaje(null); }}><Plus className="mr-2 h-4 w-4" /> Nueva oportunidad</Button></div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => { setNuevoProspecto(true); setMensaje(null); }}><UserPlus className="mr-2 h-4 w-4" /> Nuevo prospecto</Button><Button onClick={() => { setSeleccionada(null); setModal("crear"); setMensaje(null); }}><Plus className="mr-2 h-4 w-4" /> Nueva oportunidad</Button>
+        <Link
+          href="/dashboard/ventas/crm/calendario"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#123E70] hover:bg-slate-50"
+        >
+          <CalendarDays className="h-4 w-4" /> Calendario de seguimientos
+        </Link>
+      </div>
     </header>
 
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -215,8 +228,13 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                 {o.fechaSeguimiento && <p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" />Seguimiento: {o.fechaSeguimiento.split("-").reverse().join("/")}</p>}
                 <div className="mt-3 flex flex-nowrap items-center gap-1.5 border-t border-slate-100 pt-3">
                   <QuickAction label="Ver detalle" icon={<Eye className="h-4 w-4" />} onClick={() => setDetalleId(o.id)} />
-                  {!cerrada && o.etapa === "PROSPECTO" && (
-                    <QuickAction label="Completar datos del prospecto" icon={<UserPlus className="h-4 w-4" />} variant="primary" onClick={() => { setFlujoId(null); setDatosId(o.id); }} />
+                  {!cerrada && o.etapa === "PROSPECTO" && !datosProspectoCompletos(o.datosCliente) && (
+                    <QuickAction
+                      label="Convertir a cliente"
+                      icon={<UserPlus className="h-4 w-4" />}
+                      variant="primary"
+                      onClick={() => { setFlujoId(null); setDatosId(o.id); }}
+                    />
                   )}
                   {!cerrada && (
                     <QuickAction label="Registrar contacto comercial" icon={<PhoneCall className="h-4 w-4" />} variant="primary" onClick={() => {
@@ -282,10 +300,23 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                   <button type="button" onClick={() => abrirRevision(detalle, c.id)} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-[#123E70] hover:bg-sky-100"><Pencil className="h-3.5 w-3.5" /> Crear versión v{c.version + 1}</button>
                 )}
                 {c.tieneRevisionPosterior && <p className="mt-2 text-xs text-slate-500">Esta propuesta ya tiene una revisión posterior.</p>}
-                <a href={`/dashboard/cotizaciones/${c.id}/pdf`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#087EBD] hover:underline"><FileText className="h-3.5 w-3.5" /> Ver PDF</a>
-                <button type="button" onClick={() => setCotizacionDetalle({ oportunidadId: detalle.id, cotizacionId: c.id })} className="mt-2 mr-3 inline-flex items-center gap-1 text-xs font-semibold text-[#123E70] hover:underline">
-                  <Eye className="h-3.5 w-3.5" /> Ver detalle
-                </button>
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setCotizacionDetalle({ oportunidadId: detalle.id, cotizacionId: c.id })}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#123E70]/20 bg-white px-3 py-2 text-xs font-semibold text-[#123E70] hover:bg-sky-50"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Ver detalle
+                  </button>
+                  <a
+                    href={`/dashboard/cotizaciones/${c.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-[#087EBD] hover:bg-sky-50"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Ver PDF
+                  </a>
+                </div>
               </div>)}
             </div> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aún no existen cotizaciones para esta oportunidad.</p>}
           </section>
