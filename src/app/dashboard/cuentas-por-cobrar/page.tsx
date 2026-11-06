@@ -4,7 +4,7 @@ import { exigirRol } from "@/lib/guard";
 import { HandCoins, Search } from "lucide-react";
 import { RegistrarCobroDrawer } from "./registrar-cobro-drawer";
 
-type Filtros = { q?: string; estado?: string; moneda?: string; desde?: string; hasta?: string; pagina?: string };
+type Filtros = { q?: string; estado?: string; moneda?: string; desde?: string; hasta?: string; pagina?: string; ventaId?: string };
 const dinero = (moneda: "PEN" | "USD", cantidad: number) => new Intl.NumberFormat("es-PE", { style: "currency", currency: moneda }).format(cantidad);
 const fecha = (d: Date) => new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", dateStyle: "short" }).format(d);
 const numero = (x?: string) => { const n = Number(x); return Number.isSafeInteger(n) && n > 0 ? n : 1; };
@@ -22,6 +22,14 @@ type Fila = {
 export default async function CuentasPorCobrar({ searchParams }: { searchParams: Promise<Filtros> }) {
   await exigirRol(["SUPER_ADMIN", "ADMIN"]);
   const p = await searchParams;
+  const idSolicitado = Number(p.ventaId);
+  const ventaId =
+    p.ventaId &&
+      /^\d+$/.test(p.ventaId) &&
+      Number.isSafeInteger(idSolicitado) &&
+      idSolicitado > 0
+      ? idSolicitado
+      : null;
   const q = (p.q ?? "").trim().slice(0, 100);
   const moneda = p.moneda === "USD" || p.moneda === "PEN" ? p.moneda : "";
   const estado = ["PENDIENTE", "PARCIAL", "PAGADA", "ANULADA"].includes(p.estado ?? "") ? p.estado : "";
@@ -32,12 +40,15 @@ export default async function CuentasPorCobrar({ searchParams }: { searchParams:
   // Se calculan los saldos a partir de pagos reales, no de un campo posiblemente desactualizado.
   const ventas = await prisma.venta.findMany({
     where: {
+      ...(ventaId !== null ? { id: ventaId } : {}),
       ...(moneda ? { moneda } : {}),
       ...(desde || hasta ? { fecha: { ...(desde ? { gte: desde } : {}), ...(hasta ? { lte: hasta } : {}) } } : {}),
-      ...(q ? { OR: [
-        { cliente: { razonSocial: { contains: q, mode: "insensitive" } } },
-        ...(/^\d+$/.test(q) && Number.isSafeInteger(Number(q)) ? [{ id: Number(q) }] : []),
-      ] } : {}),
+      ...(q ? {
+        OR: [
+          { cliente: { razonSocial: { contains: q, mode: "insensitive" } } },
+          ...(/^\d+$/.test(q) && Number.isSafeInteger(Number(q)) ? [{ id: Number(q) }] : []),
+        ]
+      } : {}),
     },
     select: { id: true, fecha: true, moneda: true, estado: true, importeTotal: true, cliente: { select: { razonSocial: true } }, pagos: { select: { monto: true } } },
     orderBy: [{ fecha: "desc" }, { id: "desc" }],
@@ -56,7 +67,7 @@ export default async function CuentasPorCobrar({ searchParams }: { searchParams:
   const totalPaginas = Math.max(1, Math.ceil(filas.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const lista = filas.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
-  const href = (n: number) => `/dashboard/cuentas-por-cobrar?${new URLSearchParams({ ...(q ? { q } : {}), ...(estado ? { estado } : {}), ...(moneda ? { moneda } : {}), ...(p.desde ? { desde: p.desde } : {}), ...(p.hasta ? { hasta: p.hasta } : {}), pagina: String(n) })}`;
+  const href = (n: number) => `/dashboard/cuentas-por-cobrar?${new URLSearchParams({ ...(q ? { q } : {}), ...(estado ? { estado } : {}), ...(moneda ? { moneda } : {}), ...(p.desde ? { desde: p.desde } : {}), ...(p.hasta ? { hasta: p.hasta } : {}), ...(ventaId !== null ? { ventaId: String(ventaId) } : {}),  pagina: String(n) })}`;
 
   return <main className="mx-auto max-w-[1550px] space-y-6 pb-10">
     <header><p className="text-xs text-slate-500">Finanzas / Cobranza</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[#123E70] sm:text-3xl"><HandCoins className="h-7 w-7" /> Cuentas por cobrar</h1><p className="mt-1 text-sm text-slate-600">Control de saldos de todas las ventas. Registra cobros sin salir del listado.</p></header>
@@ -69,7 +80,7 @@ export default async function CuentasPorCobrar({ searchParams }: { searchParams:
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b p-4"><h2 className="font-bold text-[#123E70]">Estado de cobranza</h2><p className="text-xs text-slate-500">{filas.length} venta(s) según los filtros. Los importes se calculan a partir de pagos registrados.</p></div>
       <form action="/dashboard/cuentas-por-cobrar" method="get" className="grid gap-3 border-b p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_130px_155px_155px_auto] xl:items-end">
-        <label className="text-xs font-semibold text-slate-600">Cliente o venta<div className="relative mt-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><input name="q" defaultValue={q} placeholder="Buscar..." className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm" /></div></label>
+        <label className="text-xs font-semibold text-slate-600">Cliente o venta<div className="relative mt-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input name="q" defaultValue={q} placeholder="Buscar..." className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm" /></div></label>
         <label className="text-xs font-semibold text-slate-600">Estado<select name="estado" defaultValue={estado} className="mt-1 h-10 w-full rounded-lg border bg-white px-2 text-sm"><option value="">Todos</option><option value="PENDIENTE">Pendiente</option><option value="PARCIAL">Parcial</option><option value="PAGADA">Pagada</option><option value="ANULADA">Anulada</option></select></label>
         <label className="text-xs font-semibold text-slate-600">Moneda<select name="moneda" defaultValue={moneda} className="mt-1 h-10 w-full rounded-lg border bg-white px-2 text-sm"><option value="">Todas</option><option value="PEN">Soles</option><option value="USD">Dólares</option></select></label>
         <label className="text-xs font-semibold text-slate-600">Desde<input type="date" name="desde" defaultValue={p.desde ?? ""} className="mt-1 h-10 w-full rounded-lg border px-2 text-sm" /></label>
