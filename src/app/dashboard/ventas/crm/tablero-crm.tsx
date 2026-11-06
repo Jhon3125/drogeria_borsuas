@@ -10,13 +10,12 @@ import { Button } from "@/components/ui/button";
 import { CotizacionForm, type CotizacionBase } from "@/app/dashboard/cotizaciones/form";
 import { EstadoCotizacionBadge } from "@/app/dashboard/cotizaciones/estado-badge";
 import { AccionesEstadoCotizacion } from "@/app/dashboard/cotizaciones/acciones-estado";
-import { FormularioContacto, FormularioCalificacion, FormularioDatosProspecto } from "./formularios-prospecto";
+import { FormularioContacto, FormularioDatosProspecto } from "./formularios-prospecto";
 import { FormularioNuevoProspecto } from "./formulario-nuevo-prospecto";
 import { crearOportunidad, actualizarOportunidad, cambiarEtapaOportunidad, crearClienteDesdeCRM } from "./actions";
-import { ConvertirCotizacionAVenta } from "@/app/dashboard/cotizaciones/convertir-venta";
-import { datosProspectoCompletos } from "./datos-prospecto-completos";
-import Link from "next/link";
 
+import { ganarOportunidadYCrearVenta } from "./ganar-oportunidad";
+import { datosProspectoCompletos } from "./datos-prospecto-completos";
 
 type Etapa = "PROSPECTO" | "CONTACTADO" | "COTIZACION" | "NEGOCIACION" | "GANADA" | "PERDIDA";
 type Oportunidad = {
@@ -41,6 +40,7 @@ const SIGUIENTE: Partial<Record<Etapa, { etapa: Etapa; label: string }>> = {
   PROSPECTO: { etapa: "CONTACTADO", label: "Contactar" },
   CONTACTADO: { etapa: "COTIZACION", label: "Cotizar" },
   COTIZACION: { etapa: "NEGOCIACION", label: "Negociar" },
+  NEGOCIACION: { etapa: "GANADA", label: "Marcar ganada" },
 };
 
 function mostrarMonto(item: Oportunidad) {
@@ -66,7 +66,6 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
   const [datosId, setDatosId] = useState<number | null>(null);
   const [flujoId, setFlujoId] = useState<number | null>(null);
   const [nuevoProspecto, setNuevoProspecto] = useState(false);
-  const [calificarId, setCalificarId] = useState<number | null>(null);
   const [destino, setDestino] = useState<Etapa | null>(null);
   const [motivo, setMotivo] = useState("");
   const [arrastrada, setArrastrada] = useState<number | null>(null);
@@ -117,19 +116,25 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
   const cerrarModal = () => { setModal(null); setSeleccionada(null); };
   function abrirEditar(o: Oportunidad) { setSeleccionada(o); setModal("editar"); setMensaje(null); }
   function iniciarFlujoProspecto(id: number) {
-    const oportunidad = vistaLocal.find(o => o.id === id);
-    if (!oportunidad) return;
+    const item = vistaLocal.find((o) => o.id === id);
+    if (!item) return;
     setFlujoId(id);
-    setDatosId(datosProspectoCompletos(oportunidad.datosCliente) ? null : id);
-    setContactoId(datosProspectoCompletos(oportunidad.datosCliente) ? id : null);
-    setCalificarId(null);
     setMensaje(null);
+    // Un cliente ya calificado o con datos completos no repite el formulario.
+    const completos = item.estadoRelacionComercial === "CALIFICADO" ||
+      datosProspectoCompletos(item.datosCliente);
+    setDatosId(completos ? null : id);
+    setContactoId(completos ? id : null);
   }
   function solicitarMovimiento(id: number, etapaNueva: Etapa) {
     if (ocupado) return;
     const item = vistaLocal.find((o) => o.id === id);
     if (!item || item.etapa === etapaNueva || item.etapa === "GANADA" || item.etapa === "PERDIDA") return;
     setMensaje(null);
+    if (etapaNueva === "GANADA" && item.etapa !== "NEGOCIACION") {
+      setMensaje("Solo una oportunidad en Negociación puede marcarse como Ganada.");
+      return;
+    }
     if (item.etapa === "PROSPECTO" && etapaNueva === "CONTACTADO") {
       iniciarFlujoProspecto(item.id);
       return;
@@ -144,7 +149,28 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
     // Exigir motivo en PERDIDA; confirmar GANADA para evitar cierres por arrastre accidental.
     if (etapaNueva !== "GANADA" && etapaNueva !== "PERDIDA") realizarMovimiento(item, etapaNueva, "");
   }
+  function confirmarGanada(item: Oportunidad) {
+    if (ocupado || item.etapa !== "NEGOCIACION") return;
+    iniciarTransicion(async () => {
+      try {
+        const resultado = await ganarOportunidadYCrearVenta(item.id);
+        if (resultado?.error) {
+          setMensaje(resultado.error);
+        } else if (resultado?.ventaId) {
+          setVistaLocal((actuales) => actuales.map((o) => o.id === item.id ? { ...o, etapa: "GANADA" } : o));
+          setMensaje(`Oportunidad #${item.id} ganada. Venta #${resultado.ventaId} creada correctamente.`);
+          setDestino(null);
+          setSeleccionada(null);
+        }
+        router.refresh();
+      } catch {
+        setMensaje("No se pudo confirmar la conversión. Actualiza la página e inténtalo de nuevo.");
+        router.refresh();
+      }
+    });
+  }
   function realizarMovimiento(item: Oportunidad, etapaNueva: Etapa, comentario: string) {
+    if (etapaNueva === "GANADA") return;
     const anterior = item.etapa;
     setDestino(null);
     setSeleccionada(null);
@@ -185,15 +211,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
         <h1 className="flex items-center gap-2 text-2xl font-bold text-[#123E70] sm:text-3xl"><Columns3 className="h-7 w-7" /> Pipeline comercial</h1>
         <p className="mt-1 text-sm text-slate-600">Gestiona oportunidades por etapa. Los cambios quedan registrados en el historial comercial.</p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => { setNuevoProspecto(true); setMensaje(null); }}><UserPlus className="mr-2 h-4 w-4" /> Nuevo prospecto</Button><Button onClick={() => { setSeleccionada(null); setModal("crear"); setMensaje(null); }}><Plus className="mr-2 h-4 w-4" /> Nueva oportunidad</Button>
-        <Link
-          href="/dashboard/ventas/crm/calendario"
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#123E70] hover:bg-slate-50"
-        >
-          <CalendarDays className="h-4 w-4" /> Calendario de seguimientos
-        </Link>
-      </div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setNuevoProspecto(true); setMensaje(null); }}><UserPlus className="mr-2 h-4 w-4" /> Nuevo prospecto</Button><Button onClick={() => { setSeleccionada(null); setModal("crear"); setMensaje(null); }}><Plus className="mr-2 h-4 w-4" /> Nueva oportunidad</Button></div>
     </header>
 
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -226,15 +244,10 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                 <p className="mt-2 text-xs text-slate-500">Responsable: {o.vendedor}</p>
                 {o.cotizaciones.length > 0 && <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-sky-700"><FileText className="h-3.5 w-3.5" /> {o.cotizaciones.length} cotización(es)</p>}
                 {o.fechaSeguimiento && <p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" />Seguimiento: {o.fechaSeguimiento.split("-").reverse().join("/")}</p>}
-                <div className="mt-3 flex flex-nowrap items-center gap-1.5 border-t border-slate-100 pt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                   <QuickAction label="Ver detalle" icon={<Eye className="h-4 w-4" />} onClick={() => setDetalleId(o.id)} />
-                  {!cerrada && o.etapa === "PROSPECTO" && !datosProspectoCompletos(o.datosCliente) && (
-                    <QuickAction
-                      label="Convertir a cliente"
-                      icon={<UserPlus className="h-4 w-4" />}
-                      variant="primary"
-                      onClick={() => { setFlujoId(null); setDatosId(o.id); }}
-                    />
+                  {!cerrada && o.etapa === "PROSPECTO" && o.estadoRelacionComercial !== "CALIFICADO" && !datosProspectoCompletos(o.datosCliente) && (
+                    <QuickAction label="Convertir a cliente" icon={<UserPlus className="h-4 w-4" />} variant="primary" onClick={() => { setFlujoId(null); setDatosId(o.id); }} />
                   )}
                   {!cerrada && (
                     <QuickAction label="Registrar contacto comercial" icon={<PhoneCall className="h-4 w-4" />} variant="primary" onClick={() => {
@@ -291,31 +304,15 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
                   <span className="text-sm font-bold text-[#123E70]">{new Intl.NumberFormat("es-PE", { style: "currency", currency: c.moneda === "USD" ? "USD" : "PEN" }).format(Number(c.importeTotal))}</span>
                 </div>
                 <AccionesEstadoCotizacion cotizacionId={c.id} estado={c.estado} compacta />
-                {detalle.etapa === "NEGOCIACION" && c.estado === "ACEPTADA" && (
-                  <div className="mt-3">
-                    <ConvertirCotizacionAVenta cotizacionId={c.id} />
-                  </div>
-                )}
                 {c.estado === "RECHAZADA" && !c.tieneRevisionPosterior && !["PROSPECTO", "GANADA", "PERDIDA"].includes(detalle.etapa) && (
                   <button type="button" onClick={() => abrirRevision(detalle, c.id)} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-[#123E70] hover:bg-sky-100"><Pencil className="h-3.5 w-3.5" /> Crear versión v{c.version + 1}</button>
                 )}
                 {c.tieneRevisionPosterior && <p className="mt-2 text-xs text-slate-500">Esta propuesta ya tiene una revisión posterior.</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setCotizacionDetalle({ oportunidadId: detalle.id, cotizacionId: c.id })}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#123E70]/20 bg-white px-3 py-2 text-xs font-semibold text-[#123E70] hover:bg-sky-50"
-                  >
+                  <a href={`/dashboard/cotizaciones/${c.id}/pdf`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-[#087EBD] hover:bg-sky-50"><FileText className="h-3.5 w-3.5" /> Ver PDF</a>
+                  <button type="button" onClick={() => setCotizacionDetalle({ oportunidadId: detalle.id, cotizacionId: c.id })} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#123E70] hover:bg-slate-100">
                     <Eye className="h-3.5 w-3.5" /> Ver detalle
                   </button>
-                  <a
-                    href={`/dashboard/cotizaciones/${c.id}/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-[#087EBD] hover:bg-sky-50"
-                  >
-                    <FileText className="h-3.5 w-3.5" /> Ver PDF
-                  </a>
                 </div>
               </div>)}
             </div> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aún no existen cotizaciones para esta oportunidad.</p>}
@@ -325,7 +322,7 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
             <p className="text-xs text-slate-600">Condición del cliente: <strong>{detalle.estadoRelacionComercial === "CALIFICADO" ? "Calificado" : detalle.estadoRelacionComercial === "DESCARTADO" ? "Descartado" : "Prospecto"}</strong></p>
             <div className="flex flex-wrap gap-2">
               {detalle.etapa !== "GANADA" && detalle.etapa !== "PERDIDA" && <Button type="button" variant="outline" onClick={() => detalle.etapa === "PROSPECTO" ? iniciarFlujoProspecto(detalle.id) : setContactoId(detalle.id)}>Registrar contacto</Button>}
-              {detalle.etapa === "PROSPECTO" && detalle.estadoRelacionComercial !== "CALIFICADO" && <Button type="button" onClick={() => iniciarFlujoProspecto(detalle.id)}>Iniciar calificación</Button>}
+              {detalle.etapa === "PROSPECTO" && detalle.estadoRelacionComercial !== "CALIFICADO" && !datosProspectoCompletos(detalle.datosCliente) && <Button type="button" onClick={() => { setFlujoId(null); setDatosId(detalle.id); }}>Convertir a cliente</Button>}
             </div>
             <div className="space-y-2">{detalle.actividades.length ? detalle.actividades.map(a => <div key={a.id} className="rounded-lg bg-white p-3 text-xs"><p className="font-semibold text-slate-800">{a.tipo.replaceAll("_", " ")} · {a.resultado.replaceAll("_", " ")}</p><p className="text-slate-500">{a.usuario} · {new Date(a.fecha).toLocaleString("es-PE")}</p>{a.personaContacto && <p>Persona: {a.personaContacto}</p>}<p className="mt-1 text-slate-600">{a.observaciones}</p></div>) : <p className="text-xs text-slate-500">Sin contactos registrados.</p>}</div>
           </section>
@@ -337,8 +334,11 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
 
     {nuevoProspecto && <FormularioNuevoProspecto key="nuevo-prospecto" abierto onCerrar={() => setNuevoProspecto(false)} vendedores={vendedores} usuarioId={usuarioId} administrador={administrador} />}
     {datosId !== null && vistaLocal.find(o => o.id === datosId) && <FormularioDatosProspecto key={`datos-${datosId}`} oportunidadId={datosId} datos={vistaLocal.find(o => o.id === datosId)!.datosCliente} onCerrar={() => { setDatosId(null); setFlujoId(null); }} onGuardado={() => { const id = datosId; setDatosId(null); if (flujoId === id) setContactoId(id); else setMensaje("Datos del prospecto actualizados."); }} />}
-    {contactoId !== null && <FormularioContacto key={`contacto-${contactoId}`} oportunidadId={contactoId} abierto onCerrar={() => { setContactoId(null); setFlujoId(null); }} onGuardado={(efectivo) => { const id = contactoId; setContactoId(null); if (flujoId === id && efectivo) setCalificarId(id); else { setFlujoId(null); setMensaje(efectivo ? "Contacto guardado." : "Intento de contacto registrado. La oportunidad permanece en Prospecto."); } }} />}
-    {calificarId !== null && <FormularioCalificacion key={`calificar-${calificarId}`} oportunidadId={calificarId} abierto onCerrar={() => { setCalificarId(null); setFlujoId(null); }} />}
+    {contactoId !== null && <FormularioContacto key={`contacto-${contactoId}`} oportunidadId={contactoId} abierto onCerrar={() => { setContactoId(null); setFlujoId(null); }} onGuardado={(efectivo) => {
+      setContactoId(null);
+      setFlujoId(null);
+      setMensaje(efectivo ? "Contacto efectivo registrado. Verifica que la oportunidad haya avanzado a Contactado." : "Intento de contacto registrado. La oportunidad permanece en su etapa actual.");
+    }} />}
 
     {oportunidadCotizar && createPortal(
       <div className="fixed inset-0 z-[120]" role="presentation">
@@ -365,7 +365,63 @@ export function TableroCRM({ oportunidades, clientes, vendedores, productosCotiz
 
     <Dialog open={modal !== null} onOpenChange={(value) => { if (!value) cerrarModal(); }}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"><DialogHeader className="space-y-3 pb-2"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-primary"><Columns3 className="h-5 w-5" /></div><DialogTitle className="text-xl">{modal === "editar" ? "Editar oportunidad" : "Nueva oportunidad"}</DialogTitle><DialogDescription>Información comercial y próxima actividad de seguimiento.</DialogDescription></DialogHeader>{modal && <FormularioOportunidad key={`${modal}-${seleccionada?.id ?? 0}`} item={modal === "editar" ? seleccionada : null} clientes={clientes} vendedores={vendedores} usuarioId={usuarioId} administrador={administrador} onCerrar={cerrarModal} onGuardado={() => { cerrarModal(); router.refresh(); }} />}</DialogContent></Dialog>
 
-    <Dialog open={destino !== null} onOpenChange={(abierta) => { if (!abierta && !ocupado) { setDestino(null); setSeleccionada(null); } }}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Confirmar cambio de etapa</DialogTitle><DialogDescription>{destino === "PERDIDA" ? "Registra el motivo por el que se perdió esta oportunidad." : "Marcar esta oportunidad como ganada cerrará su negociación."}</DialogDescription></DialogHeader>{destino === "PERDIDA" && <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={2000} rows={3} className="w-full rounded-lg border p-3 text-sm" placeholder="Motivo de pérdida (obligatorio)" />}<div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={ocupado} onClick={() => { setDestino(null); setSeleccionada(null); }}>Cancelar</Button><Button type="button" disabled={ocupado || !seleccionada || !destino || (destino === "PERDIDA" && !motivo.trim())} onClick={() => { if (seleccionada && destino) realizarMovimiento(seleccionada, destino, motivo.trim()); }}>Confirmar</Button></div></DialogContent></Dialog>
+    <Dialog open={destino !== null} onOpenChange={(abierta) => { if (!abierta && !ocupado) { setDestino(null); setSeleccionada(null); } }}>
+      <DialogContent className="!z-[400] sm:max-w-md" overlayClassName="!z-[390] !bg-slate-950/75 backdrop-blur-[4px]">
+        <DialogHeader>
+          <DialogTitle>{destino === "GANADA" ? "¿Confirmar oportunidad ganada?" : "Confirmar cambio de etapa"}</DialogTitle>
+          <DialogDescription>
+            {destino === "GANADA"
+              ? "Se aceptará automáticamente la última cotización vigente y se creará una venta confirmada. La operación no descuenta inventario."
+              : "Registra el motivo por el que se perdió esta oportunidad."}
+          </DialogDescription>
+        </DialogHeader>
+        {destino === "GANADA" && seleccionada && (() => {
+          const ultima = [...seleccionada.cotizaciones]
+            .filter((c) => !c.tieneRevisionPosterior)
+            .sort((a, b) => b.id - a.id)[0];
+          const valido = ultima && ["EMITIDA", "ACEPTADA"].includes(ultima.estado)
+            && (ultima.estado === "ACEPTADA" || !ultima.validezHasta || new Date(`${ultima.validezHasta.slice(0, 10)}T23:59:59`).getTime() >= Date.now());
+          return <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p><strong>Oportunidad:</strong> {seleccionada.titulo}</p>
+            <p><strong>Cliente:</strong> {seleccionada.cliente}</p>
+            {ultima ? <>
+              <p><strong>Última cotización:</strong> COT-{String(ultima.id).padStart(5, "0")} · versión {ultima.version}</p>
+              <p><strong>Estado:</strong> {ultima.estado}</p>
+              <p><strong>Total:</strong> {ultima.moneda} {ultima.importeTotal}</p>
+              {ultima.revision.items?.length > 0 && <div className="mt-2 border-t border-slate-200 pt-2">
+                <p className="mb-1 font-semibold">Productos ({ultima.revision.items.length}):</p>
+                {ultima.revision.items.slice(0, 4).map((d, i) => <p key={String(d.productoId) + "-" + i} className="text-xs text-slate-600">
+                  {d.cantidad} × {productosCotizacion.find(p => p.id === d.productoId)?.nombre ?? ("Producto #" + d.productoId)}
+                </p>)}
+                {ultima.revision.items.length > 4 && <p className="text-xs text-slate-500">Y {ultima.revision.items.length - 4} producto(s) más...</p>}
+              </div>}
+            </> : <p className="text-red-700">No hay cotizaciones disponibles.</p>}
+            {!valido && <p role="alert" className="font-medium text-red-700">La última cotización debe estar emitida/aceptada y vigente. Revisa su estado antes de continuar.</p>}
+          </div>;
+        })()}
+        {destino === "GANADA" && mensaje && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{mensaje}</p>}
+        {destino === "PERDIDA" && (
+          <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={2000} rows={3} className="w-full rounded-lg border p-3 text-sm" placeholder="Motivo de pérdida (obligatorio)" />
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={ocupado} onClick={() => { setDestino(null); setSeleccionada(null); }}>Cancelar</Button>
+          <Button
+            type="button"
+            disabled={ocupado || !seleccionada || !destino || (destino === "PERDIDA" && !motivo.trim()) || (destino === "GANADA" && !(() => {
+              const ultima = [...(seleccionada?.cotizaciones ?? [])].filter(c => !c.tieneRevisionPosterior).sort((a,b) => b.id - a.id)[0];
+              return ultima && ["EMITIDA", "ACEPTADA"].includes(ultima.estado) && (ultima.estado === "ACEPTADA" || !ultima.validezHasta || new Date(`${ultima.validezHasta.slice(0, 10)}T23:59:59`).getTime() >= Date.now());
+            })())}
+            onClick={() => {
+              if (!seleccionada || !destino) return;
+              if (destino === "GANADA") confirmarGanada(seleccionada);
+              else realizarMovimiento(seleccionada, destino, motivo.trim());
+            }}
+          >
+            {ocupado ? "Procesando..." : destino === "GANADA" ? "Confirmar y crear venta" : "Confirmar"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
     <DetalleCotizacionDrawer
       cotizacion={cotizacionVista}
       cliente={oportunidadConCotizacion?.cliente ?? ""}

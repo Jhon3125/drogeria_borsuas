@@ -92,6 +92,20 @@ export const NAVEGACION: ItemNav[] = [
         icono: "users",
         grupo: "administracion",
     },
+    {
+        titulo: "Cuentas por cobrar",
+        href: "/dashboard/cuentas-por-cobrar",
+        roles: ["SUPER_ADMIN", "ADMIN"],
+        icono: "wallet",
+        grupo: "principal",
+    },
+    {
+        titulo: "Flujo de caja",
+        href: "/dashboard/caja",
+        roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"],
+        icono: "wallet",
+        grupo: "principal",
+    },
 ];
 
 export const ETIQUETA_ROL: Record<RolUsuario, string> = {
@@ -170,12 +184,6 @@ export const NAVEGACION_FUTURA: ItemNavFuturo[] = [
         roles: GERENCIA,
         grupo: "finanzas",
         icono: "receipt",
-    },
-    {
-        titulo: "Cuentas por cobrar",
-        roles: COMERCIALES,
-        grupo: "finanzas",
-        icono: "credit-card",
     },
 
     // Logística

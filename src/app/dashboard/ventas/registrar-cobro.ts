@@ -182,6 +182,7 @@ export async function registrarCobroVenta(
     revalidatePath(`/dashboard/ventas/${x.ventaId}`);
     revalidatePath("/dashboard/ventas");
     revalidatePath("/dashboard/caja");
+    revalidatePath("/dashboard/cuentas-por-cobrar");
 
     return { ok: resultado };
   } catch (error) {
