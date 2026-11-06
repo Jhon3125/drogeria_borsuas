@@ -16,7 +16,7 @@ type Props = {
 const pestanas = [
   { id: "resumen", nombre: "Resumen", icono: ClipboardList },
   { id: "lotes", nombre: "Productos y lotes", icono: Boxes },
-  { id: "pagos", nombre: "Pagos", icono: Wallet },
+  { id: "pagos", nombre: "Pagos y cobranza", icono: Wallet },
   { id: "despachos", nombre: "Despachos", icono: Truck },
   { id: "historial", nombre: "Historial", icono: History },
 ] as const;
