@@ -37,7 +37,7 @@ export function FormularioNuevoProspecto({ abierto, onCerrar, vendedores, usuari
             <label className="text-sm font-semibold text-slate-700">Persona de referencia<input name="personaContacto" maxLength={120} className={input} placeholder="Opcional" /></label>
             <label className="text-sm font-semibold text-slate-700">DNI / RUC<input name="documento" inputMode="numeric" pattern="(?:[0-9]{8}|[0-9]{11})" className={input} placeholder="Opcional en prospectos" /></label>
           </div>
-          <p className="text-xs text-slate-500">Se requiere al menos un teléfono o correo. El documento se completará antes de la calificación.</p>
+          <p className="text-xs text-slate-500">Teléfono, correo y documento son opcionales en este primer registro. Se completarán antes de avanzar a Contactado.</p>
           <div className="border-t border-slate-200 pt-3">
             <h3 className="mb-3 text-sm font-bold text-[#123E70]">Primera oportunidad</h3>
             <div className="space-y-3">

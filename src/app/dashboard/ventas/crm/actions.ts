@@ -401,14 +401,14 @@ export async function cambiarEtapaOportunidad(
   if (!resultado.success) return { error: resultado.error.issues[0]?.message ?? "Cambio inválido." };
 
   const x = resultado.data;
+  
+  if (x.etapaNueva === "GANADA") {
+    return {
+      error: "Convierte la última cotización en venta para marcar la oportunidad como Ganada.",
+    };
+  }
 
   if (x.etapaNueva === x.etapaEsperada) return { error: "Selecciona una etapa diferente." };
-
-  if (x.etapaEsperada === "GANADA" || x.etapaEsperada === "PERDIDA") {
-
-    return { error: "Las oportunidades cerradas no pueden moverse." };
-
-  }
 
   if (x.etapaNueva === "PERDIDA" && !x.comentario) {
 
