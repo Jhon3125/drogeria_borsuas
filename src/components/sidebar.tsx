@@ -35,7 +35,16 @@ const FUTUROS: Record<IconoFuturo, IconType> = {
 const SECCIONES = [
   { id: "comercial", titulo: "Comercial y ventas", rutas: ["/dashboard/clientes", "/dashboard/ventas/crm", "/dashboard/cotizaciones", "/dashboard/ventas"] },
   { id: "inventario", titulo: "Inventario y compras", rutas: ["/dashboard/productos", "/dashboard/categorias", "/dashboard/inventario", "/dashboard/proveedores", "/dashboard/compras", "/dashboard/lotes"] },
-  { id: "finanzas", titulo: "Finanzas", rutas: ["/dashboard/caja", "/dashboard/ordenes-pago", "/dashboard/ordenes-pago/conciliacion"] },
+  {
+    id: "finanzas",
+    titulo: "Finanzas",
+    rutas: [
+      "/dashboard/cuentas-por-cobrar",
+      "/dashboard/caja",
+      "/dashboard/ordenes-pago",
+      "/dashboard/ordenes-pago/conciliacion",
+    ],
+  },
   { id: "administracion", titulo: "Administración", rutas: ["/dashboard/usuarios"] },
 ] as const;
 

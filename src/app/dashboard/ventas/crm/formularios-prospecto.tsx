@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { registrarActividadProspecto, calificarClienteDesdeOportunidad, completarDatosProspecto } from "./acciones-prospecto";
+import { registrarActividadProspecto, completarDatosProspecto } from "./acciones-prospecto";
 
 // Portal fuera del drawer: impide que sus capas/overflow oculten el formulario.
 function PortalFormulario({ titulo, descripcion, children, onCerrar, pendiente = false }: {
@@ -73,26 +73,6 @@ export function FormularioContacto({ oportunidadId, abierto, onCerrar, onGuardad
   </PortalFormulario>;
 }
 
-export function FormularioCalificacion({ oportunidadId, abierto, onCerrar }: {
-  oportunidadId: number; abierto: boolean; onCerrar: () => void;
-}) {
-  const router = useRouter();
-  const [estado, accion, pendiente] = useActionState(calificarClienteDesdeOportunidad, undefined);
-  const enviado = useRef(false);
-  useEffect(() => { if (estado?.ok && !enviado.current) { enviado.current = true; router.refresh(); onCerrar(); } }, [estado?.ok, router, onCerrar]);
-  if (!abierto) return null;
-  return <PortalFormulario titulo="Calificar cliente" descripcion="Requiere contacto efectivo y datos comerciales completos. Al aprobar, la oportunidad avanzará a Contactado." onCerrar={onCerrar} pendiente={pendiente}>
-    <form action={accion} className="space-y-4">
-      <input type="hidden" name="oportunidadId" value={oportunidadId} />
-      <label className="block text-sm font-semibold">Persona responsable<input name="personaContacto" required minLength={2} maxLength={120} className="mt-1 w-full rounded-lg border p-2" /></label>
-      <label className="block text-sm font-semibold">Necesidad identificada<textarea name="necesidad" required minLength={10} maxLength={1000} rows={3} className="mt-1 w-full rounded-lg border p-2" /></label>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="interesConfirmado" value="si" required className="mt-1" /><span>Confirmo que el cliente manifestó interés y sus datos fueron verificados.</span></label>
-      {estado?.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{estado.error}</p>}
-      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={pendiente} onClick={onCerrar}>Cancelar</Button><Button type="submit" disabled={pendiente}>{pendiente ? "Validando..." : "Calificar cliente"}</Button></div>
-    </form>
-  </PortalFormulario>;
-}
-
 export type DatosProspecto = { razonSocial: string; documento: string | null; telefono: string | null; correo: string | null; direccion: string | null };
 export function FormularioDatosProspecto({ oportunidadId, datos, onCerrar, onGuardado }: {
   oportunidadId: number; datos: DatosProspecto; onCerrar: () => void; onGuardado: () => void;
@@ -102,7 +82,7 @@ export function FormularioDatosProspecto({ oportunidadId, datos, onCerrar, onGua
   const enviado = useRef(false);
   useEffect(() => { if (estado?.ok && !enviado.current) { enviado.current = true; router.refresh(); onGuardado(); } }, [estado?.ok, router, onGuardado]);
   const campo = "mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200";
-  return <PortalFormulario titulo="Convertir a cliente" descripcion="Completa los datos comerciales necesarios para continuar con el contacto y la calificación." onCerrar={onCerrar} pendiente={pendiente}>
+  return <PortalFormulario titulo="Convertir a cliente" descripcion="Se requiere un DNI/RUC válido y al menos un teléfono o correo. El contacto efectivo calificará automáticamente al cliente." onCerrar={onCerrar} pendiente={pendiente}>
     <form action={accion} className="space-y-4">
       <input type="hidden" name="oportunidadId" value={oportunidadId} />
       <label className="block text-sm font-semibold">Razón social o nombre *<input required name="razonSocial" defaultValue={datos.razonSocial} minLength={2} maxLength={180} className={campo} /></label>
