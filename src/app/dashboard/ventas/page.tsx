@@ -18,6 +18,7 @@ export default async function VentasPage() {
         cotizacion: { select: { id: true, version: true } },
         oportunidad: { select: { id: true } },
         detalles: { select: { cantidad: true, asignacionesLote: { select: { cantidad: true } } } },
+        despachos: { select: { estado: true }, take: 1 },
       },
     }),
     prisma.venta.groupBy({ by: ["estado"], where, _count: { _all: true } }),
@@ -33,6 +34,7 @@ export default async function VentasPage() {
       documento: v.cliente.documento ?? "",
       vendedor: v.vendedor.nombre,
       estado: v.estado,
+      estadoVisual: v.despachos[0] ? (v.despachos[0].estado === "PENDIENTE" ? "PROGRAMADO" : v.despachos[0].estado === "EN_RUTA" ? "EN_RUTA" : v.despachos[0].estado === "REPROGRAMADO" ? "REPROGRAMADO" : "COMPLETADA") : (v.detalles.length && v.detalles.every(d => d.asignacionesLote.reduce((n,a)=>n+a.cantidad,0) === d.cantidad) && v.saldoPendiente.lte(0) && v.estado !== "ANULADA" ? "LISTO_PARA_DESPACHO" : v.estado),
       moneda: v.moneda,
       total: v.importeTotal.toFixed(2),
       saldo: v.saldoPendiente.toFixed(2),
@@ -67,7 +69,7 @@ export default async function VentasPage() {
         </div>)}
       </section>
       <ListadoVentas ventas={registros} />
-      <p className="text-xs text-slate-500">Las asignaciones de lotes comprometen existencias disponibles, pero todavía no registran su salida física. El movimiento de inventario se implementará en la fase siguiente.</p>
+      <p className="text-xs text-slate-500">La asignación de lotes reserva stock. La salida física se registra una sola vez al iniciar la ruta en Logística.</p>
     </main>
   );
 }

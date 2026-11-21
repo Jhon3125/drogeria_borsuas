@@ -15,6 +15,8 @@ import {
     ShieldCheck,
     ShoppingCart,
     Tags,
+    Route,
+    CarFront,
     Truck,
     Users,
     Wallet,
@@ -48,6 +50,14 @@ const ICONOS: Record<IconoNav, LucideIcon> = {
     wallet: Wallet,
     "clipboard-check": ClipboardCheck,
     columns: Columns3,
+    truck: Truck,
+    route: Route,
+    car: CarFront,
+    receipt: ClipboardList,
+    "bell-ring": AlertTriangle,
+    chart: LayoutDashboard,
+    history: ClipboardList,
+    settings: ShieldCheck,
 };
 
 const DESCRIPCIONES: Record<string, string> = {

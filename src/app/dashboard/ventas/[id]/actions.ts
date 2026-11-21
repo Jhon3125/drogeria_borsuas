@@ -144,3 +144,48 @@ export async function asignarLotesVenta(
       ? mensaje : "No se pudieron guardar las asignaciones. Verifica stock y vuelve a intentar." };
   }
 }
+
+
+/** H0009: El pago no cambia stock físico. Solo habilita la programación si los lotes están completos. */
+export async function registrarPagoVenta(form: FormData): Promise<void> {
+  const usuario = await exigirRol(["SUPER_ADMIN", "ADMIN"]);
+  const ventaId = Number(form.get("ventaId"));
+  const cantidad = String(form.get("monto") ?? "").trim();
+  const metodo = String(form.get("metodoPago") ?? "");
+  const clave = String(form.get("claveIdempotencia") ?? "");
+  if (!Number.isSafeInteger(ventaId) || ventaId <= 0) throw new Error("Venta inválida.");
+  if (!/^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/.test(cantidad)) throw new Error("Monto inválido; usa hasta dos decimales.");
+  if (!["EFECTIVO", "TRANSFERENCIA", "TARJETA"].includes(metodo)) throw new Error("Método de cobro inválido.");
+  if (!/^[a-f0-9-]{36}$/.test(clave)) throw new Error("Identificador de solicitud inválido.");
+  const monto = new Prisma.Decimal(cantidad);
+  if (!monto.isFinite() || monto.lte(0)) throw new Error("El pago debe ser mayor a cero.");
+  try {
+    await prisma.$transaction(async tx => {
+      // Evita doble clic incluso cuando dos solicitudes llegan simultáneamente.
+      if (await tx.pago.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } })) return;
+      const venta = await tx.venta.findUnique({ where: { id: ventaId } });
+      if (!venta) throw new Error("La venta no existe.");
+      if (venta.estado === "ANULADA") throw new Error("No se puede cobrar una venta anulada.");
+      if (venta.saldoPendiente.lte(0)) throw new Error("La venta no tiene saldo pendiente.");
+      if (monto.greaterThan(venta.saldoPendiente)) throw new Error("El pago supera el saldo pendiente.");
+      const nuevoSaldo = venta.saldoPendiente.minus(monto);
+      const result = await tx.venta.updateMany({
+        where: { id: ventaId, saldoPendiente: venta.saldoPendiente },
+        data: { saldoPendiente: nuevoSaldo, metodoPago: metodo as "EFECTIVO" | "TRANSFERENCIA" | "TARJETA" },
+      });
+      if (result.count !== 1) throw new Error("El saldo cambió. Actualiza antes de cobrar.");
+      await tx.pago.create({
+        data: { ventaId, monto, metodoPago: metodo as "EFECTIVO" | "TRANSFERENCIA" | "TARJETA", claveIdempotencia: clave, registradoPorId: Number(usuario.id) },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      // Reintento con la misma clave; el primer registro ya está persistido.
+    } else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      throw new Error("Otro cobro cambió el saldo. Actualiza y vuelve a intentar.");
+    } else throw error;
+  }
+  revalidatePath(`/dashboard/ventas/${ventaId}`);
+  revalidatePath("/dashboard/ventas");
+  revalidatePath("/dashboard/logistica/rutas");
+}

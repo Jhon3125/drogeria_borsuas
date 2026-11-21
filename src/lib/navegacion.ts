@@ -13,9 +13,17 @@ export type IconoNav =
     | "file-text"
     | "wallet"
     | "clipboard-check"
-    | "columns";
+    | "columns"
+    | "truck"
+    | "route"
+    | "car"
+    | "receipt"
+    | "bell-ring"
+    | "chart"
+    | "history"
+    | "settings";
 
-export type GrupoNav = "principal" | "comercial" | "administracion";
+export type GrupoNav = "principal" | "comercial" | "logistica" | "administracion";
 
 export type ItemNav = {
     titulo: string;
@@ -84,6 +92,14 @@ export const NAVEGACION: ItemNav[] = [
     { titulo: "Oportunidades", href: "/dashboard/ventas/crm", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "columns", grupo: "comercial" },
     { titulo: "Cotizaciones", href: "/dashboard/cotizaciones", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "file-text", grupo: "comercial" },
     { titulo: "Ventas", href: "/dashboard/ventas", roles: ["SUPER_ADMIN", "ADMIN", "COMERCIAL"], icono: "shopping-cart", grupo: "comercial" },
+    { titulo: "Despachos", href: "/dashboard/logistica/despachos", roles: ["SUPER_ADMIN", "ADMIN", "ALMACEN", "CONDUCTOR"], icono: "truck", grupo: "logistica" },
+    { titulo: "Hojas de ruta", href: "/dashboard/logistica/rutas", roles: ["SUPER_ADMIN", "ADMIN", "ALMACEN", "CONDUCTOR"], icono: "route", grupo: "logistica" },
+    { titulo: "Vehículos", href: "/dashboard/logistica/vehiculos", roles: ["SUPER_ADMIN", "ADMIN"], icono: "car", grupo: "logistica" },
+    { titulo: "Gastos", href: "/dashboard/gastos", roles: ["SUPER_ADMIN", "ADMIN"], icono: "receipt", grupo: "administracion" },
+    { titulo: "Alertas", href: "/dashboard/alertas", roles: ["SUPER_ADMIN", "ADMIN"], icono: "bell-ring", grupo: "administracion" },
+    { titulo: "Reportes y BI", href: "/dashboard/reportes", roles: ["SUPER_ADMIN", "ADMIN"], icono: "chart", grupo: "administracion" },
+    { titulo: "Historial y trazabilidad", href: "/dashboard/trazabilidad", roles: ["SUPER_ADMIN", "ADMIN"], icono: "history", grupo: "administracion" },
+    { titulo: "Configuración", href: "/dashboard/configuracion", roles: ["SUPER_ADMIN", "ADMIN"], icono: "settings", grupo: "administracion" },
     {
         titulo: "Usuarios",
         href: "/dashboard/usuarios",
@@ -163,77 +179,7 @@ const LOGISTICA: RolUsuario[] = [
 ];
 
 export const NAVEGACION_FUTURA: ItemNavFuturo[] = [
-    // Finanzas
-    {
-        titulo: "Caja y movimientos",
-        roles: COMERCIALES,
-        grupo: "finanzas",
-        icono: "wallet",
-    },
-    {
-        titulo: "Gastos",
-        roles: GERENCIA,
-        grupo: "finanzas",
-        icono: "receipt",
-    },
-    {
-        titulo: "Cuentas por cobrar",
-        roles: COMERCIALES,
-        grupo: "finanzas",
-        icono: "credit-card",
-    },
-
-    // Logística
-    {
-        titulo: "Despachos",
-        roles: LOGISTICA,
-        grupo: "logistica",
-        icono: "truck",
-    },
-    {
-        titulo: "Hojas de ruta",
-        roles: LOGISTICA,
-        grupo: "logistica",
-        icono: "route",
-    },
-    {
-        titulo: "Vehículos",
-        roles: GERENCIA,
-        grupo: "logistica",
-        icono: "car",
-    },
-
-    // Análisis y seguimiento
-    {
-        titulo: "Alertas",
-        roles: GERENCIA,
-        grupo: "analitica",
-        icono: "bell-ring",
-    },
-    {
-        titulo: "Reportes y BI",
-        roles: GERENCIA,
-        grupo: "analitica",
-        icono: "chart",
-    },
-    {
-        titulo: "Asistente IA",
-        roles: GERENCIA,
-        grupo: "analitica",
-        icono: "sparkles",
-    },
-    {
-        titulo: "Historial y trazabilidad",
-        roles: GERENCIA,
-        grupo: "analitica",
-        icono: "history",
-    },
-
-    // Administración
-    {
-        titulo: "Configuración",
-        roles: GERENCIA,
-        grupo: "administracion",
-        icono: "settings",
-    },
+    { titulo: "Caja y movimientos", roles: COMERCIALES, grupo: "finanzas", icono: "wallet" },
+    { titulo: "Cuentas por cobrar", roles: COMERCIALES, grupo: "finanzas", icono: "credit-card" },
+    { titulo: "Asistente IA", roles: GERENCIA, grupo: "analitica", icono: "sparkles" },
 ];

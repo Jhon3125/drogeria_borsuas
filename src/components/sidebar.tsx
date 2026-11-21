@@ -71,6 +71,14 @@ const ICONOS: Record<IconoNav, IconoComponente> = {
     wallet: Wallet,
     "clipboard-check": ClipboardCheck,
     columns: Columns3,
+    truck: Truck,
+    route: Route,
+    car: CarFront,
+    receipt: Receipt,
+    "bell-ring": BellRing,
+    chart: ChartNoAxesCombined,
+    history: History,
+    settings: Settings,
 };
 
 const ICONOS_FUTUROS: Record<
@@ -153,6 +161,8 @@ export function Sidebar({
 
     const comerciales = items.filter((item) => item.grupo === "comercial");
 
+    const logistica = items.filter((item) => item.grupo === "logistica");
+
     const finanzas = items.filter((item) =>
         FINANZAS_HABILITADAS.has(item.href)
     );
@@ -164,8 +174,9 @@ export function Sidebar({
     );
 
     const administracion = items.filter(
-        (item) => item.grupo === "administracion"
+        (item) => item.grupo === "administracion" && item.href === "/dashboard/usuarios"
     );
+    const gestion = items.filter(item => item.grupo === "administracion" && item.href !== "/dashboard/usuarios");
 
     function renderItem(item: ItemNav) {
         const Icono = ICONOS[item.icono];
@@ -297,6 +308,16 @@ export function Sidebar({
                     </section>
                 )}
 
+                {/* Logística: sección independiente y funcional */}
+                {logistica.length > 0 && (
+                    <section>
+                        <TituloGrupo>Logística</TituloGrupo>
+                        <div className="space-y-1">
+                            {logistica.map(renderItem)}
+                        </div>
+                    </section>
+                )}
+
                 {/* Finanzas */}
                 {finanzas.length > 0 && (
                     <section>
@@ -309,6 +330,8 @@ export function Sidebar({
                         </div>
                     </section>
                 )}
+
+                {gestion.length > 0 && <section><TituloGrupo>Gestión y análisis</TituloGrupo><div className="space-y-1">{gestion.map(renderItem)}</div></section>}
 
                 {/* Módulos futuros */}
 

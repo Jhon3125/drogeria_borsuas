@@ -43,6 +43,7 @@ enum TipoMovimiento {
   SALIDA_VENTA
   AJUSTE_POSITIVO
   AJUSTE_NEGATIVO
+  ENTRADA_DEVOLUCION
 }
 
 enum EstadoDespacho {
@@ -166,6 +167,8 @@ model Usuario {
   historialOportunidades   HistorialOportunidad[] @relation("ResponsableHistorialOportunidad")
   cotizaciones             Cotizacion[]           @relation("VendedorCotizacion")
   actividadesComerciales   ActividadComercial[]   @relation("ResponsableActividadComercial")
+  historialDespachos       HistorialDespacho[]    @relation("AutorHistorialDespacho")
+  pagosRegistrados         Pago[]                @relation("PagoRegistradoPor")
 }
 
 // ==========================================
@@ -432,13 +435,18 @@ model AsignacionLoteVenta {
 }
 
 model Pago {
-  id         Int        @id @default(autoincrement())
-  ventaId    Int
-  monto      Decimal    @db.Decimal(12, 2)
-  fecha      DateTime   @default(now())
-  metodoPago MetodoPago
+  id                Int        @id @default(autoincrement())
+  ventaId           Int
+  monto             Decimal    @db.Decimal(12, 2)
+  fecha             DateTime   @default(now())
+  metodoPago        MetodoPago
+  claveIdempotencia String?    @unique @db.VarChar(64)
+  registradoPorId   Int?
 
-  venta Venta @relation(fields: [ventaId], references: [id])
+  venta         Venta    @relation(fields: [ventaId], references: [id])
+  registradoPor Usuario? @relation("PagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+
+  @@index([ventaId, fecha])
 }
 
 enum EstadoCotizacion {
@@ -616,13 +624,50 @@ model HojaRuta {
 model Despacho {
   id                 Int            @id @default(autoincrement())
   hojaRutaId         Int
-  ventaId            Int            @unique
+  ventaId            Int
   estado             EstadoDespacho @default(PENDIENTE)
   observacion        String?
   fechaActualizacion DateTime       @updatedAt
+  salidaInventarioEn DateTime?
+  devolucionInventarioEn DateTime?
+  devolucionMotivo String? @db.VarChar(500)
+  receptor           String?        @db.VarChar(120)
+  entregadoEn        DateTime?
+  historial          HistorialDespacho[]
+  evidencia          EvidenciaEntrega?
 
   hojaRuta HojaRuta @relation(fields: [hojaRutaId], references: [id])
   venta    Venta    @relation(fields: [ventaId], references: [id])
+
+  @@index([ventaId])
+}
+
+/// Historial inmutable de transiciones de despacho.
+model HistorialDespacho {
+  id             Int            @id @default(autoincrement())
+  despachoId     Int
+  usuarioId      Int
+  estadoAnterior EstadoDespacho
+  estadoNuevo    EstadoDespacho
+  observacion    String?        @db.VarChar(500)
+  fecha          DateTime       @default(now())
+
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Restrict)
+  usuario  Usuario  @relation("AutorHistorialDespacho", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([despachoId, fecha])
+}
+
+/// Una foto por despacho; bytes privados en PostgreSQL, nunca en /public.
+model EvidenciaEntrega {
+  id         Int      @id @default(autoincrement())
+  despachoId Int      @unique
+  contenido  Bytes    @db.ByteA
+  tipoMime   String   @db.VarChar(30)
+  nombre     String   @db.VarChar(150)
+  fecha      DateTime @default(now())
+
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Restrict)
 }
 
 /// Solicitud y autorización de pago asociada a una Orden de Compra.
@@ -702,4 +747,11 @@ model HistorialOrdenPago {
 
   @@index([ordenPagoId, fecha])
   @@index([usuarioId])
+}
+
+/// Preferencias operativas globales. Solo administradores pueden cambiarlas.
+model ConfiguracionSistema {
+  id Int @id @default(1)
+  diasAlertaVencimiento Int @default(90)
+  actualizadoEn DateTime @updatedAt
 }
