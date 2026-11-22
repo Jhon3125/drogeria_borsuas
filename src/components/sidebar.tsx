@@ -17,6 +17,9 @@ type Props = { items: ItemNav[]; futuros: ItemNavFuturo[] };
 type IconType = ComponentType<{ className?: string }>;
 
 const ICONOS: Record<IconoNav, IconType> = {
+  truck: Truck, route: Route, car: CarFront, receipt: Receipt,
+  "bell-ring": BellRing, chart: ChartNoAxesCombined, history: History,
+  settings: Settings,
   dashboard: LayoutDashboard, users: Users, package: Package, tags: Tags,
   boxes: Boxes, building: Building2, "shopping-cart": ShoppingCart,
   "package-search": PackageSearch, "users-round": UsersRound,
@@ -45,6 +48,8 @@ const SECCIONES = [
       "/dashboard/ordenes-pago/conciliacion",
     ],
   },
+  { id: "logistica", titulo: "Logística", rutas: ["/dashboard/logistica/despachos", "/dashboard/logistica/rutas", "/dashboard/logistica/vehiculos"] },
+  { id: "gestion", titulo: "Gestión y análisis", rutas: ["/dashboard/gastos", "/dashboard/alertas", "/dashboard/reportes", "/dashboard/trazabilidad", "/dashboard/configuracion"] },
   { id: "administracion", titulo: "Administración", rutas: ["/dashboard/usuarios"] },
 ] as const;
 
@@ -54,7 +59,7 @@ function rutaActiva(path: string, href: string) {
 
 export function Sidebar({ items, futuros }: Props) {
   const pathname = usePathname();
-  const [abiertas, setAbiertas] = useState<string[]>(["comercial", "inventario", "finanzas", "administracion"]);
+  const [abiertas, setAbiertas] = useState<string[]>(["comercial", "inventario", "finanzas", "logistica", "gestion", "administracion"]);
   const [mostrarFuturos, setMostrarFuturos] = useState(false);
   const [cargado, setCargado] = useState(false);
 
@@ -105,7 +110,7 @@ export function Sidebar({ items, futuros }: Props) {
   }
 
   // Mostrar solo módulos realmente pendientes, sin incluir duplicados implementados.
-  const pendientes = futuros.filter((f) => !items.some((i) => i.titulo.toLowerCase() === f.titulo.toLowerCase()));
+  const pendientes = futuros.filter((f) => f.titulo !== "Asistente IA" && !items.some((i) => i.titulo.toLowerCase() === f.titulo.toLowerCase()));
   const futurosLogistica = pendientes.filter((f) => f.grupo === "logistica");
   const otrosFuturos = pendientes.filter((f) => f.grupo !== "logistica");
 

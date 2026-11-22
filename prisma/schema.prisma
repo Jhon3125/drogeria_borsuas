@@ -43,6 +43,7 @@ enum TipoMovimiento {
   SALIDA_VENTA
   AJUSTE_POSITIVO
   AJUSTE_NEGATIVO
+  ENTRADA_DEVOLUCION
 }
 
 enum EstadoDespacho {
@@ -135,7 +136,7 @@ enum ResultadoActividadComercial {
 }
 
 // ==========================================
-// MÓDULO 1: USUARIOS Y ROLES (H0001, H0002)
+// M├ôDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
 
 model Usuario {
@@ -167,10 +168,11 @@ model Usuario {
   cotizaciones             Cotizacion[]           @relation("VendedorCotizacion")
   actividadesComerciales   ActividadComercial[]   @relation("ResponsableActividadComercial")
   cobrosRegistrados        Pago[]                 @relation("ResponsableCobro")
+  historialDespachos       HistorialDespacho[]    @relation("AutorHistorialDespacho")
 }
 
 // ==========================================
-// MÓDULO 2: CATÁLOGO DE PRODUCTOS (H0003)
+// M├ôDULO 2: CAT├üLOGO DE PRODUCTOS (H0003)
 // ==========================================
 
 model Categoria {
@@ -204,7 +206,7 @@ model Producto {
 }
 
 // ==========================================
-// MÓDULO 3: PROVEEDORES, COMPRAS, LOTES E INVENTARIO (H0004, H0005)
+// M├ôDULO 3: PROVEEDORES, COMPRAS, LOTES E INVENTARIO (H0004, H0005)
 // ==========================================
 
 model Proveedor {
@@ -244,8 +246,8 @@ model DetalleCompra {
   cantidad       Int
   precioUnitario Decimal @db.Decimal(12, 2)
 
-  // Compatibilidad con órdenes antiguas.
-  // Las órdenes nuevas no registrarán estos datos aquí.
+  // Compatibilidad con ├│rdenes antiguas.
+  // Las ├│rdenes nuevas no registrar├ín estos datos aqu├¡.
   numeroLote       String?
   fechaVencimiento DateTime?
 
@@ -275,7 +277,7 @@ model Lote {
 }
 
 /// Registra una cantidad recibida realmente, incluso en entregas parciales.
-/// Una compra antigua RECIBIDO no se migra a recepción ficticia.
+/// Una compra antigua RECIBIDO no se migra a recepci├│n ficticia.
 model RecepcionCompra {
   id              Int      @id @default(autoincrement())
   compraId        Int
@@ -352,7 +354,7 @@ model RetencionLote {
 }
 
 // ==========================================
-// MÓDULO 4: CRM, CLIENTES, COTIZACIONES Y VENTAS (H0006, H0007, H0008, H0009)
+// M├ôDULO 4: CRM, CLIENTES, COTIZACIONES Y VENTAS (H0006, H0007, H0008, H0009)
 // ==========================================
 
 model Cliente {
@@ -440,6 +442,7 @@ model Pago {
   monto           Decimal    @db.Decimal(12, 2)
   fecha           DateTime   @default(now())
   claveOperacion  String?    @unique @db.Uuid
+  claveIdempotencia String? @unique @db.VarChar(64)
   referencia      String?    @db.VarChar(120)
   registradoPorId Int?
   metodoPago      MetodoPago
@@ -448,6 +451,7 @@ model Pago {
   venta         Venta    @relation(fields: [ventaId], references: [id])
 
   @@index([registradoPorId])
+  @@index([ventaId, fecha])
 }
 
 enum EstadoCotizacion {
@@ -581,7 +585,7 @@ model ActividadComercial {
 }
 
 // ==========================================
-// MÓDULO 5: CAJA Y GASTOS OPERATIVOS (H0009)
+// M├ôDULO 5: CAJA Y GASTOS OPERATIVOS (H0009)
 // ==========================================
 
 model Gasto {
@@ -597,7 +601,7 @@ model Gasto {
 }
 
 // ==========================================
-// MÓDULO 6: LOGÍSTICA Y DESPACHOS (H0010, H0011, H0012)
+// M├ôDULO 6: LOG├ìSTICA Y DESPACHOS (H0010, H0011, H0012)
 // ==========================================
 
 model Vehiculo {
@@ -629,11 +633,18 @@ model Despacho {
   estado             EstadoDespacho @default(PENDIENTE)
   observacion        String?
   fechaCreacion      DateTime       @default(now())
+  salidaInventarioEn DateTime?
+  devolucionInventarioEn DateTime?
+  devolucionMotivo   String?        @db.VarChar(500)
+  receptor           String?        @db.VarChar(120)
+  entregadoEn        DateTime?
   fechaActualizacion DateTime       @updatedAt
 
   hojaRuta HojaRuta?         @relation(fields: [hojaRutaId], references: [id], onDelete: SetNull)
   venta    Venta             @relation(fields: [ventaId], references: [id], onDelete: Restrict)
-  detalles DetalleDespacho[]
+  detalles  DetalleDespacho[]
+  historial HistorialDespacho[]
+  evidencia EvidenciaEntrega?
 
   @@index([ventaId])
   @@index([hojaRutaId])
@@ -653,7 +664,33 @@ model DetalleDespacho {
   @@index([asignacionLoteVentaId])
 }
 
-/// Solicitud y autorización de pago asociada a una Orden de Compra.
+model HistorialDespacho {
+  id             Int            @id @default(autoincrement())
+  despachoId     Int
+  usuarioId      Int
+  estadoAnterior EstadoDespacho
+  estadoNuevo    EstadoDespacho
+  observacion    String?        @db.VarChar(500)
+  fecha          DateTime       @default(now())
+
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Restrict)
+  usuario  Usuario  @relation("AutorHistorialDespacho", fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([despachoId, fecha])
+}
+
+model EvidenciaEntrega {
+  id         Int      @id @default(autoincrement())
+  despachoId Int      @unique
+  contenido  Bytes    @db.ByteA
+  tipoMime   String   @db.VarChar(30)
+  nombre     String   @db.VarChar(150)
+  fecha      DateTime @default(now())
+
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Restrict)
+}
+
+/// Solicitud y autorizaci├│n de pago asociada a una Orden de Compra.
 /// El monto solicitado debe estar respaldado por recepciones reales.
 model OrdenPago {
   id            Int             @id @default(autoincrement())
@@ -730,4 +767,10 @@ model HistorialOrdenPago {
 
   @@index([ordenPagoId, fecha])
   @@index([usuarioId])
+}
+
+model ConfiguracionSistema {
+  id Int @id @default(1)
+  diasAlertaVencimiento Int @default(90)
+  actualizadoEn DateTime @default(now()) @updatedAt
 }

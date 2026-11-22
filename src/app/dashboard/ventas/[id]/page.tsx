@@ -101,7 +101,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
     <section className={`${tarjeta} space-y-4`}>
       <h2 className="text-base font-bold text-[#123E70]">Resumen financiero</h2>
       <Fila nombre="Subtotal" valor={fmt(venta.moneda, Number(venta.subtotal))} />
-      <Fila nombre="Descuento general" valor={`− ${fmt(venta.moneda, Number(venta.descuento))}`} />
+      <Fila nombre="Descuento general" valor={`ÔêÆ ${fmt(venta.moneda, Number(venta.descuento))}`} />
       <div className="border-t pt-3"><Fila nombre="Total vendido" valor={fmt(venta.moneda, Number(venta.importeTotal))} destacado /></div>
       <Fila nombre="Pagos registrados" valor={fmt(venta.moneda, pagado)} />
       <Fila nombre="Saldo calculado" valor={fmt(venta.moneda, saldoCalculado)} destacado />
@@ -307,6 +307,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
       <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-medium text-slate-500">Comercial y ventas / Venta 360°</p><h1 className="mt-1 text-2xl font-bold text-[#123E70]">Venta #{String(venta.id).padStart(5, "0")}</h1><p className="mt-1 text-sm text-slate-600">{venta.cliente.razonSocial} · {fechaTexto(venta.fecha)}</p></div><span className={`rounded-full px-3 py-1.5 text-xs font-bold ${venta.estado === "COMPLETADA" ? "bg-emerald-100 text-emerald-800" : venta.estado === "ANULADA" ? "bg-rose-100 text-rose-800" : "bg-sky-100 text-sky-800"}`}>{venta.estado.replaceAll("_", " ")}</span></div>
       <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3"><MiniKpi nombre="Importe de venta" valor={fmt(venta.moneda, Number(venta.importeTotal))} /><MiniKpi nombre="Preparación" valor={`${cantidadAsignada} / ${cantidadVendida} uds.`} /><MiniKpi nombre="Cobranza" valor={estadoCobranza} /></div>
     </header>
+    <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">La asignación de lotes reserva existencias; la salida física debe registrarse una sola vez al iniciar el despacho.</p>
     <VistaVentaTabs resumen={resumen} lotes={productos} pagos={pagos} despachos={despachos} historial={historial} pendientes={pendientes} />
   </main>;
 }

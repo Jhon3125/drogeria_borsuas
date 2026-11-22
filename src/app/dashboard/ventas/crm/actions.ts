@@ -401,7 +401,7 @@ export async function cambiarEtapaOportunidad(
   if (!resultado.success) return { error: resultado.error.issues[0]?.message ?? "Cambio inválido." };
 
   const x = resultado.data;
-  
+
   if (x.etapaNueva === "GANADA") {
     return {
       error: "Convierte la última cotización en venta para marcar la oportunidad como Ganada.",

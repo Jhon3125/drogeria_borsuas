@@ -2,7 +2,8 @@ import Link from "next/link";
 import {
   ArrowRight, CheckCircle2, ClipboardList, CreditCard, FileText,
   LayoutDashboard, Package, ShieldCheck, ShoppingCart, Tags, Users,
-  Wallet, AlertTriangle, type LucideIcon,
+  Wallet, AlertTriangle, Truck, Route, CarFront, Receipt, BellRing,
+  ChartNoAxesCombined, History, Settings, type LucideIcon,
 } from "lucide-react";
 import { usuarioVigente } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +13,8 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { GraficoVentas, GraficoCotizaciones } from "@/components/dashboard/grafico-ventas";
 
 const ICONOS: Record<IconoNav, LucideIcon> = {
+  truck: Truck, route: Route, car: CarFront, receipt: Receipt,
+  "bell-ring": BellRing, chart: ChartNoAxesCombined, history: History, settings: Settings,
   dashboard: LayoutDashboard, users: Users, package: Package, tags: Tags,
   boxes: Package, building: Package, "shopping-cart": ShoppingCart,
   "package-search": Package, "users-round": Users, "file-text": FileText,
@@ -23,6 +26,11 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/cotizaciones": "Cotizaciones, versiones y estados.",
   "/dashboard/ventas": "Ventas y preparación de pedidos.",
   "/dashboard/caja": "Consulta cobros y pagos recibidos.",
+  "/dashboard/cuentas-por-cobrar": "Seguimiento de saldos pendientes.",
+  "/dashboard/logistica/despachos": "Entregas, fotografías e historial.",
+  "/dashboard/logistica/rutas": "Programación de hojas de ruta.",
+  "/dashboard/reportes": "Indicadores y análisis empresarial.",
+  "/dashboard/gastos": "Registro y revisión de gastos.",
   "/dashboard/productos": "Catálogo de productos.",
   "/dashboard/inventario": "Existencias y movimientos de stock.",
   "/dashboard/compras": "Gestión de compras.",
@@ -71,7 +79,7 @@ export default async function DashboardPage() {
   const numeroCotizaciones = (estado: string) => cotizaciones.find((c) => c.estado === estado)?._count._all ?? 0;
   const pendientes = numeroCotizaciones("BORRADOR") + numeroCotizaciones("EMITIDA");
   const [totalVentas, saldoPen, saldoUsd, preparando] = ventaTotales ?? [0, null, null, 0];
-  const accesos = ["/dashboard/clientes", "/dashboard/ventas/crm", "/dashboard/cotizaciones", "/dashboard/ventas", "/dashboard/caja", "/dashboard/inventario", "/dashboard/compras", "/dashboard/productos"];
+  const accesos = ["/dashboard/clientes", "/dashboard/ventas/crm", "/dashboard/cotizaciones", "/dashboard/ventas", "/dashboard/caja", "/dashboard/cuentas-por-cobrar", "/dashboard/inventario", "/dashboard/compras", "/dashboard/productos", "/dashboard/logistica/despachos", "/dashboard/logistica/rutas", "/dashboard/reportes", "/dashboard/gastos"];
   const accesoRapido = accesos.map((ruta) => modulos.find((m) => m.href === ruta)).filter((m): m is (typeof modulos)[number] => !!m);
 
   return (
