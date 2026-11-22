@@ -53,7 +53,7 @@ export default async function ReportesPage({ searchParams }: Props) {
  const saldoVentasMes=sumar(ventasMes.map(v=>Number(v.saldoPendiente)));
  const progreso=pct(cobrado,facturado);
  const entregados=despachos.filter(d=>d.estado==="ENTREGADO" && d.entregadoEn && dentro(d.entregadoEn)).length;
- const rutasMes=despachos.filter(d=>dentro(d.hojaRuta.fecha));
+ const rutasMes=despachos.filter(d=>d.hojaRuta && dentro(d.hojaRuta.fecha));
  const programados=rutasMes.filter(d=>d.estado==="PENDIENTE").length;
  const enRuta=rutasMes.filter(d=>d.estado==="EN_RUTA").length;
  const reprogramados=rutasMes.filter(d=>d.estado==="REPROGRAMADO").length;

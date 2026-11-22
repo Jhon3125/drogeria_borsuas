@@ -1,7 +1,7 @@
 
 import { usuarioVigente } from "@/lib/guard";
 import { VersionUpdater } from "@/components/version-updater";
-
+import { SidebarMobile } from "@/components/sidebar-mobile";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 
@@ -18,8 +18,7 @@ export default async function DashboardLayout({
     const usuario = await usuarioVigente();
     const rol = usuario.rol;
 
-    // Enviamos todos los módulos autorizados al Sidebar.
-    // El propio Sidebar decide cuáles mostrar al desplegar módulos futuros.
+    // Filtrar módulos según los permisos del usuario.
     const items = NAVEGACION.filter((item) =>
         item.roles.includes(rol)
     );
@@ -33,13 +32,20 @@ export default async function DashboardLayout({
     return (
         <div className="flex h-dvh overflow-hidden bg-background">
             <VersionUpdater />
-            {/* Sidebar independiente */}
+
+            {/* Sidebar exclusivo de escritorio */}
             <div className="hidden h-full shrink-0 md:block">
                 <Sidebar
                     items={items}
                     futuros={futuros}
                 />
             </div>
+
+            {/* Menú hamburguesa exclusivo para móviles */}
+            <SidebarMobile
+                items={items}
+                futuros={futuros}
+            />
 
             {/* Área principal */}
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">

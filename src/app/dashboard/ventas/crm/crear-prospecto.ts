@@ -27,7 +27,6 @@ export async function crearProspectoConOportunidad(_: EstadoNuevoProspecto, form
   ));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   const x = parsed.data;
-  if (!x.telefono && !x.correo) return { error: "Indica un teléfono o correo para realizar el primer contacto." };
   const actorId = Number(usuario.id);
   const admin = usuario.rol === "ADMIN" || usuario.rol === "SUPER_ADMIN";
   if (!admin && x.vendedorId !== actorId) return { error: "Solo puedes asignarte prospectos a ti mismo." };

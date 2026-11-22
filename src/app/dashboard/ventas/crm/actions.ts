@@ -402,13 +402,13 @@ export async function cambiarEtapaOportunidad(
 
   const x = resultado.data;
 
-  if (x.etapaNueva === x.etapaEsperada) return { error: "Selecciona una etapa diferente." };
-
-  if (x.etapaEsperada === "GANADA" || x.etapaEsperada === "PERDIDA") {
-
-    return { error: "Las oportunidades cerradas no pueden moverse." };
-
+  if (x.etapaNueva === "GANADA") {
+    return {
+      error: "Convierte la última cotización en venta para marcar la oportunidad como Ganada.",
+    };
   }
+
+  if (x.etapaNueva === x.etapaEsperada) return { error: "Selecciona una etapa diferente." };
 
   if (x.etapaNueva === "PERDIDA" && !x.comentario) {
 

@@ -39,9 +39,38 @@ export async function convertirCotizacionAVenta(
       if (usuario.rol === "COMERCIAL" && Number(usuario.id) !== cotizacion.vendedorId) {
         throw new Error("No tienes permisos para esta cotización.");
       }
+
+      if (cotizacion.oportunidadId !== null) {
+        const todasLasCotizaciones = await tx.cotizacion.findMany({
+          where: {
+            oportunidadId: cotizacion.oportunidadId,
+          },
+          select: {
+            id: true,
+            cotizacionAnteriorId: true,
+          },
+        });
+
+        const idsRevisados = new Set(
+          todasLasCotizaciones
+            .map((c) => c.cotizacionAnteriorId)
+            .filter((id): id is number => id !== null)
+        );
+
+        const terminales = todasLasCotizaciones
+          .filter((c) => !idsRevisados.has(c.id))
+          .sort((a, b) => b.id - a.id);
+
+        if (terminales[0]?.id !== cotizacion.id) {
+          throw new Error(
+            "Solo puedes convertir la última versión de la cotización."
+          );
+        }
+      }
+
       if (cotizacion.oportunidad) {
         if (cotizacion.oportunidad.clienteId !== cotizacion.clienteId ||
-            cotizacion.oportunidad.vendedorId !== cotizacion.vendedorId) {
+          cotizacion.oportunidad.vendedorId !== cotizacion.vendedorId) {
           throw new Error("La cotización no coincide con su oportunidad.");
         }
         if (["PROSPECTO", "CONTACTADO", "COTIZACION", "GANADA", "PERDIDA"].includes(cotizacion.oportunidad.etapa)) {
@@ -74,12 +103,14 @@ export async function convertirCotizacionAVenta(
           importeTotal: cotizacion.importeTotal,
           saldoPendiente: cotizacion.importeTotal,
           estado: "CONFIRMADA",
-          detalles: { create: cotizacion.detalles.map((d) => ({
-            productoId: d.productoId,
-            cantidad: d.cantidad,
-            precioUnitario: d.precioUnitario,
-            descuento: d.descuento,
-          })) },
+          detalles: {
+            create: cotizacion.detalles.map((d) => ({
+              productoId: d.productoId,
+              cantidad: d.cantidad,
+              precioUnitario: d.precioUnitario,
+              descuento: d.descuento,
+            }))
+          },
         },
         select: { id: true },
       });

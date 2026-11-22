@@ -34,7 +34,7 @@ export function ConvertirCotizacionAVenta({ cotizacionId }: { cotizacionId: numb
       )}
       {estado?.error && !abierto && <span role="alert" className="text-xs text-red-700">{estado.error}</span>}
       <Dialog open={abierto} onOpenChange={(v) => { if (!pendiente) setAbierto(v); }}>
-        <DialogContent className="sm:max-w-md" overlayClassName="!bg-slate-950/70 backdrop-blur-[4px]">
+        <DialogContent className="!z-[400] sm:max-w-md" overlayClassName="!z-[390] !bg-slate-950/75 backdrop-blur-[4px]">
           <DialogHeader>
             <DialogTitle>Confirmar conversión a venta</DialogTitle>
             <DialogDescription>

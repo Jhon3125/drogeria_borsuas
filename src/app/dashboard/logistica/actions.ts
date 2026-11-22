@@ -97,11 +97,16 @@ export async function actualizarDespacho(d: FormData) {
   }
   await prisma.$transaction(async tx => {
     const despacho = await tx.despacho.findUnique({
-      where: { id }, include: { hojaRuta: true,
+      where: { id }, include: { hojaRuta: true, detalles: { select: { id: true } },
         venta: { include: { detalles: { include: { asignacionesLote: true } } } } },
     });
     if (!despacho) throw new Error("Despacho inexistente.");
-    if (usuario.rol === "CONDUCTOR" && despacho.hojaRuta.conductorId !== Number(usuario.id)) throw new Error("No es tu despacho.");
+    if (usuario.rol === "CONDUCTOR" && despacho.hojaRuta?.conductorId !== Number(usuario.id)) throw new Error("No es tu despacho.");
+    // Esta acción trabaja con pedidos completos. Los despachos parciales/sin ruta
+    // de main requieren su propio flujo para no descontar toda la venta dos veces.
+    if (!despacho.hojaRuta || despacho.detalles.length > 0) {
+      throw new Error("Despacho parcial o sin hoja de ruta: gestiona la entrega desde su flujo específico. No se modificó el inventario.");
+    }
     if ((estado === "EN_RUTA" && despacho.estado !== "PENDIENTE") ||
        (["ENTREGADO", "REPROGRAMADO"].includes(estado) && despacho.estado !== "EN_RUTA")) throw new Error("Transición de estado no permitida.");
     if (despacho.venta.estado === "ANULADA") throw new Error("La venta está anulada.");
@@ -168,10 +173,13 @@ export async function recibirDevolucionDespacho(d: FormData) {
   await prisma.$transaction(async tx => {
     const despacho = await tx.despacho.findUnique({
       where: { id },
-      include: { venta: { include: { detalles: { include: { asignacionesLote: true } } } } },
+      include: { detalles: { select: { id: true } }, venta: { include: { detalles: { include: { asignacionesLote: true } } } } },
     });
     if (!despacho || despacho.estado !== "REPROGRAMADO" || !despacho.salidaInventarioEn || despacho.devolucionInventarioEn) {
       throw new Error("Solo se reciben devoluciones de despachos reprogramados, con salida y sin devolución previa.");
+    }
+    if (despacho.detalles.length > 0 || !despacho.hojaRutaId) {
+      throw new Error("La devolución parcial o sin ruta requiere su flujo específico; no se modificó el inventario.");
     }
     const cantidades = new Map<number, { productoId: number; cantidad: number }>();
     for (const det of despacho.venta.detalles) {
