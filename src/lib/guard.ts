@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { RolUsuario } from "@/generated/prisma/enums";
 
 /** Consulta el estado/rol vigente: revoca permisos incluso con JWT previo. */
-export async function usuarioVigente() {
+export const usuarioVigente = cache(async function usuarioVigente() {
     const session = await auth();
     if (!session?.user?.id) redirect("/login");
     const id = Number(session.user.id);
@@ -15,7 +16,7 @@ export async function usuarioVigente() {
     });
     if (!usuario || usuario.estado !== "ACTIVO") redirect("/cuenta-sin-acceso");
     return { id: String(usuario.id), name: usuario.nombre, email: usuario.email, rol: usuario.rol };
-}
+});
 
 export async function exigirRol(rolesPermitidos: RolUsuario[]) {
     const usuario = await usuarioVigente();

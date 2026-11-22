@@ -66,11 +66,13 @@ export default async function InventarioPage({
     const categoriaId = /^\d+$/.test(filtros.categoriaId ?? "") &&
         Number.isSafeInteger(Number(filtros.categoriaId)) && Number(filtros.categoriaId) > 0
         ? Number(filtros.categoriaId) : undefined;
-    const categorias = await prisma.categoria.findMany({
-        select: { id: true, nombre: true }, orderBy: { nombre: "asc" },
-    });
-
-    const productos = await consultarInventarioRespaldado();
+    // Ambas consultas son independientes; se ejecutan en paralelo.
+    const [categorias, productos] = await Promise.all([
+        prisma.categoria.findMany({
+            select: { id: true, nombre: true }, orderBy: { nombre: "asc" },
+        }),
+        consultarInventarioRespaldado(),
+    ]);
     const opcionesAjuste = productos
         .filter((producto) => producto.estado)
         .map((producto) => ({

@@ -6,7 +6,7 @@ import { ArrowUpRight, Search, Package, FileText } from "lucide-react";
 
 type VentaVista = {
   id: number; fecha: string; cliente: string; documento: string; vendedor: string;
-  estado: string; moneda: string; total: string; saldo: string;
+  estado: string; estadoVisual: string; moneda: string; total: string; saldo: string;
   productos: number; requeridas: number; asignadas: number;
   cotizacionId: number | null; version: number | null; oportunidadId: number | null;
 };
@@ -15,6 +15,10 @@ const ESTADOS: Record<string, { titulo: string; clase: string }> = {
   EN_PREPARACION: { titulo: "En preparación", clase: "bg-amber-100 text-amber-800" },
   DESPACHADA: { titulo: "Despachada", clase: "bg-violet-100 text-violet-800" },
   COMPLETADA: { titulo: "Completada", clase: "bg-emerald-100 text-emerald-800" },
+  LISTO_PARA_DESPACHO: { titulo: "Listo para despacho", clase: "bg-teal-100 text-teal-800" },
+  PROGRAMADO: { titulo: "Programado para ruta", clase: "bg-indigo-100 text-indigo-800" },
+  EN_RUTA: { titulo: "En ruta", clase: "bg-violet-100 text-violet-800" },
+  REPROGRAMADO: { titulo: "Reprogramado", clase: "bg-orange-100 text-orange-800" },
   ANULADA: { titulo: "Anulada", clase: "bg-rose-100 text-rose-800" },
 };
 const moneda = (n: string, m: string) => new Intl.NumberFormat("es-PE", { style: "currency", currency: m === "USD" ? "USD" : "PEN" }).format(Number(n));
@@ -24,7 +28,7 @@ export function ListadoVentas({ ventas }: { ventas: VentaVista[] }) {
   const [estado, setEstado] = useState("TODOS");
   const visibles = useMemo(() => ventas.filter((v) => {
     const q = busqueda.trim().toLocaleLowerCase("es-PE");
-    return (estado === "TODOS" || estado === v.estado) &&
+    return (estado === "TODOS" || estado === v.estadoVisual) &&
       (!q || `${v.id} ${v.cliente} ${v.documento} ${v.vendedor} ${v.cotizacionId ?? ""}`.toLocaleLowerCase("es-PE").includes(q));
   }), [ventas, estado, busqueda]);
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -41,7 +45,7 @@ export function ListadoVentas({ ventas }: { ventas: VentaVista[] }) {
       <th className="px-5 py-3">Venta</th><th className="px-4 py-3">Cliente</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Preparación</th><th className="px-4 py-3">Origen</th><th className="px-4 py-3 text-right">Total</th><th className="px-5 py-3 text-right">Acción</th>
     </tr></thead><tbody className="divide-y divide-slate-100">
       {visibles.map((v) => {
-        const status = ESTADOS[v.estado] ?? { titulo: v.estado, clase: "bg-slate-100 text-slate-700" };
+        const status = ESTADOS[v.estadoVisual] ?? { titulo: v.estadoVisual, clase: "bg-slate-100 text-slate-700" };
         const porcentaje = v.requeridas ? Math.min(100, Math.round(v.asignadas / v.requeridas * 100)) : 0;
         return <tr key={v.id} className="hover:bg-slate-50/70">
           <td className="px-5 py-4"><Link className="font-bold text-[#123E70] hover:underline" href={`/dashboard/ventas/${v.id}`}>VEN-{String(v.id).padStart(5, "0")}</Link><p className="text-xs text-slate-500">{new Date(v.fecha).toLocaleDateString("es-PE", { timeZone: "America/Lima" })}</p></td>
