@@ -5,6 +5,7 @@ import { SidebarMobile } from "@/components/sidebar-mobile";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { NAVEGACION, NAVEGACION_FUTURA } from "@/lib/navegacion";
+import { LogoutButton } from "@/components/logout-button";
 
 export default async function DashboardLayout({
     children,
@@ -42,12 +43,19 @@ export default async function DashboardLayout({
 
                             <div className="flex shrink-0 items-center gap-2">
                                 <span className="hidden text-right sm:block">
-                                    <span className="block max-w-36 truncate text-sm font-semibold text-slate-800">{usuario.name}</span>
-                                    <span className="block text-xs text-slate-500">Conductor</span>
+                                    <span className="block max-w-36 truncate text-sm font-semibold text-slate-800">
+                                        {usuario.name}
+                                    </span>
+                                    <span className="block text-xs text-slate-500">
+                                        Conductor
+                                    </span>
                                 </span>
+
                                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-[#123E70]">
                                     {usuario.name.trim().charAt(0).toUpperCase()}
                                 </span>
+
+                                <LogoutButton compacto />
                             </div>
                         </div>
                     </header>

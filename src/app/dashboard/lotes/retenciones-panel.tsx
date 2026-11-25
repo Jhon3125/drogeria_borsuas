@@ -35,6 +35,7 @@ type Retencion = {
 type Props = {
     loteId: number;
     stockFisico: number;
+    unidadesComprometidas: number;
     retenciones: Retencion[];
     puedeGestionar: boolean;
 };
@@ -255,6 +256,7 @@ function LiberarRetencion({
 export function RetencionesPanel({
     loteId,
     stockFisico,
+    unidadesComprometidas,
     retenciones,
     puedeGestionar,
 }: Props) {
@@ -262,7 +264,10 @@ export function RetencionesPanel({
         .filter((retencion) => retencion.estado === "ACTIVA")
         .reduce((total, retencion) => total + retencion.cantidad, 0);
 
-    const libres = Math.max(0, stockFisico - retenidas);
+    const libres = Math.max(
+        0,
+        stockFisico - retenidas - unidadesComprometidas
+    );
 
     const fecha = (valor: string) =>
         new Intl.DateTimeFormat("es-PE", {
@@ -286,7 +291,7 @@ export function RetencionesPanel({
                 </div>
             </div>
 
-            <div className="grid gap-3 p-5 sm:grid-cols-3">
+            <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-lg bg-secondary/30 p-4">
                     <p className="text-xs text-muted-foreground">
                         Stock físico
@@ -305,9 +310,18 @@ export function RetencionesPanel({
                     </p>
                 </div>
 
+                <div className="rounded-lg bg-blue-50 p-4">
+                    <p className="text-xs text-blue-800">
+                        Comprometidas en ventas
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-blue-800">
+                        {unidadesComprometidas}
+                    </p>
+                </div>
+
                 <div className="rounded-lg bg-emerald-50 p-4">
                     <p className="text-xs text-emerald-800">
-                        Unidades sin retención parcial
+                        Unidades libres para retener
                     </p>
                     <p className="mt-2 text-2xl font-bold text-emerald-800">
                         {libres}
@@ -349,8 +363,8 @@ export function RetencionesPanel({
 
                                     <span
                                         className={`rounded-full px-2 py-1 text-xs ${retencion.estado === "ACTIVA"
-                                                ? "bg-amber-50 text-amber-700"
-                                                : "bg-emerald-50 text-emerald-700"
+                                            ? "bg-amber-50 text-amber-700"
+                                            : "bg-emerald-50 text-emerald-700"
                                             }`}
                                     >
                                         {retencion.estado === "ACTIVA"
