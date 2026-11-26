@@ -26,6 +26,16 @@ function fechaHoyPeru(): string {
   return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }
 
+async function bloquearLote(
+  tx: Prisma.TransactionClient,
+  loteId: number
+) {
+  await tx.$queryRaw<{ adquirido: number }[]>`
+    SELECT 1::integer AS adquirido
+    FROM pg_advisory_xact_lock(847202, ${loteId})
+  `;
+}
+
 async function guardarAsignacion(payload: z.infer<typeof asignacionSchema>) {
   return prisma.$transaction(async (tx) => {
     const detalle = await tx.detalleVenta.findUnique({
@@ -41,21 +51,119 @@ async function guardarAsignacion(payload: z.infer<typeof asignacionSchema>) {
     if (new Set(payload.lotes.map((x) => x.loteId)).size !== payload.lotes.length) {
       throw new Error("No repitas el mismo lote.");
     }
+
     const totalAsignado = payload.lotes.reduce((s, x) => s + x.cantidad, 0);
+
     if (!Number.isSafeInteger(totalAsignado) || totalAsignado > detalle.cantidad) {
       throw new Error("La cantidad asignada supera la cantidad vendida.");
     }
 
+    // Consultar las asignaciones actuales del detalle.
+    // Estos lotes también deben bloquearse porque podrían liberarse.
+    const asignacionesActuales = await tx.asignacionLoteVenta.findMany({
+      where: {
+        detalleVentaId: detalle.id,
+      },
+      select: {
+        loteId: true,
+      },
+    });
+
+    // Bloquear tanto los lotes anteriores como los nuevos.
+    const idsBloqueo = [
+      ...new Set([
+        ...asignacionesActuales.map((a) => a.loteId),
+        ...payload.lotes.map((x) => x.loteId),
+      ]),
+    ].sort((a, b) => a - b);
+
+    // Mantener un orden consistente para evitar bloqueos cruzados.
+    for (const loteId of idsBloqueo) {
+      await bloquearLote(tx, loteId);
+    }
+
+
     if (payload.lotes.length > 0) {
       const ids = payload.lotes.map((x) => x.loteId);
+
       const lotes = await tx.lote.findMany({
         where: { id: { in: ids } },
         select: {
-          id: true, productoId: true, cantidadDisponible: true,
-          estadoCalidad: true, fechaVencimiento: true,
+          id: true,
+          productoId: true,
+          numeroLote: true,
+          cantidadInicial: true,
+          cantidadDisponible: true,
+          estadoCalidad: true,
+          fechaVencimiento: true,
+
+          recepciones: {
+            select: {
+              cantidad: true,
+              compraId: true,
+              detalleCompraId: true,
+
+              compra: {
+                select: {
+                  estado: true,
+                },
+              },
+
+              detalleCompra: {
+                select: {
+                  compraId: true,
+                  productoId: true,
+                  numeroLote: true,
+                  fechaVencimiento: true,
+                },
+              },
+            },
+          },
         },
       });
+
       if (lotes.length !== ids.length) throw new Error("Uno de los lotes no existe.");
+      for (const lote of lotes) {
+        const totalRecibido = lote.recepciones.reduce(
+          (total, recepcion) => total + recepcion.cantidad,
+          0
+        );
+
+        const respaldado =
+          lote.recepciones.length > 0 &&
+          totalRecibido >= lote.cantidadInicial &&
+          lote.recepciones.every((recepcion) => {
+            const detalle = recepcion.detalleCompra;
+
+            const relacionValida =
+              ["RECIBIDO", "PARCIAL"].includes(
+                recepcion.compra.estado
+              ) &&
+              recepcion.compraId === detalle.compraId &&
+              recepcion.detalleCompraId > 0 &&
+              detalle.productoId === lote.productoId;
+
+            // Compatibilidad con compras antiguas.
+            const loteHistoricoValido =
+              (!detalle.numeroLote ||
+                detalle.numeroLote === lote.numeroLote) &&
+              (!detalle.fechaVencimiento ||
+                detalle.fechaVencimiento.getTime() ===
+                lote.fechaVencimiento.getTime());
+
+            return relacionValida && loteHistoricoValido;
+          });
+
+        if (
+          !respaldado ||
+          lote.cantidadDisponible < 0 ||
+          lote.cantidadDisponible > lote.cantidadInicial
+        ) {
+          throw new Error(
+            `El lote ${lote.numeroLote} no está respaldado por recepciones válidas.`
+          );
+        }
+      }
       const hoy = fechaHoyPeru();
       for (const lote of lotes) {
         if (lote.productoId !== detalle.productoId) throw new Error("Un lote pertenece a otro producto.");
@@ -126,9 +234,11 @@ export async function asignarLotesVenta(
     const ventaId = await guardarAsignacion(valid.data);
     revalidatePath(`/dashboard/ventas/${ventaId}`);
     revalidatePath("/dashboard/ventas");
-    return { ok: valid.data.lotes.length
-      ? "Asignación guardada. No se descontó inventario."
-      : "Asignaciones retiradas. No se modificó el inventario." };
+    return {
+      ok: valid.data.lotes.length
+        ? "Asignación guardada. No se descontó inventario."
+        : "Asignaciones retiradas. No se modificó el inventario."
+    };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
       return { error: "El stock cambió durante la operación. Actualiza y vuelve a intentar." };
@@ -139,9 +249,12 @@ export async function asignarLotesVenta(
       "No repitas el mismo lote.", "La cantidad asignada supera la cantidad vendida.",
       "Uno de los lotes no existe.", "Un lote pertenece a otro producto.",
       "Hay lotes bloqueados o en cuarentena.", "No se pueden asignar lotes vencidos.",
+      "El lote no está respaldado por recepciones válidas.",
     ];
-    return { error: conocidos.includes(mensaje) || mensaje.startsWith("Stock libre insuficiente")
-      ? mensaje : "No se pudieron guardar las asignaciones. Verifica stock y vuelve a intentar." };
+    return {
+      error: conocidos.includes(mensaje) || mensaje.startsWith("Stock libre insuficiente")
+        ? mensaje : "No se pudieron guardar las asignaciones. Verifica stock y vuelve a intentar."
+    };
   }
 }
 

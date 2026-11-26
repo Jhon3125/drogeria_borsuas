@@ -120,7 +120,29 @@ export function DirectorioProveedores({ proveedores, puedeGestionar }: Props) {
                     <Link href={`/dashboard/proveedores/${p.id}`} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-[#123E70] hover:bg-slate-50">Ver detalle</Link>
                     {puedeGestionar && <>
                       <button type="button" onClick={() => { setProveedorEditar(p); setModalAbierto(true); }} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-[#087EBD] hover:bg-blue-50">Editar</button>
-                      <form action={cambiarEstadoProveedor}><input type="hidden" name="id" value={p.id} /><button type="submit" className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${p.estado ? "border-red-200 text-red-700 hover:bg-red-50" : "border-green-200 text-[#238B55] hover:bg-green-50"}`}>{p.estado ? "Desactivar" : "Activar"}</button></form>
+                      <form action={cambiarEstadoProveedor}>
+                        <input
+                          type="hidden"
+                          name="id"
+                          value={p.id}
+                        />
+
+                        <input
+                          type="hidden"
+                          name="accion"
+                          value={p.estado ? "DESACTIVAR" : "ACTIVAR"}
+                        />
+
+                        <button
+                          type="submit"
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${p.estado
+                              ? "border-red-200 text-red-700 hover:bg-red-50"
+                              : "border-green-200 text-[#238B55] hover:bg-green-50"
+                            }`}
+                        >
+                          {p.estado ? "Desactivar" : "Activar"}
+                        </button>
+                      </form>
                     </>}
                   </div></td>
                 </tr>

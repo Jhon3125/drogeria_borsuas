@@ -269,12 +269,37 @@ export function RetencionesPanel({
         stockFisico - retenidas - unidadesComprometidas
     );
 
-    const fecha = (valor: string) =>
-        new Intl.DateTimeFormat("es-PE", {
-            dateStyle: "medium",
-            timeStyle: "short",
-            timeZone: "America/Lima",
-        }).format(new Date(valor));
+    const fecha = (valor: string) => {
+        const fechaUTC = new Date(valor);
+
+        if (Number.isNaN(fechaUTC.getTime())) {
+            return "Fecha inválida";
+        }
+
+        // Convertir UTC a hora de Perú (UTC-5).
+        const fechaLima = new Date(
+            fechaUTC.getTime() - 5 * 60 * 60 * 1000
+        );
+
+        const dia = String(fechaLima.getUTCDate()).padStart(2, "0");
+
+        const meses = [
+            "ene.", "feb.", "mar.", "abr.",
+            "may.", "jun.", "jul.", "ago.",
+            "sep.", "oct.", "nov.", "dic.",
+        ];
+
+        const mes = meses[fechaLima.getUTCMonth()];
+        const anio = fechaLima.getUTCFullYear();
+
+        const hora24 = fechaLima.getUTCHours();
+        const minutos = String(fechaLima.getUTCMinutes()).padStart(2, "0");
+
+        const periodo = hora24 >= 12 ? "p. m." : "a. m.";
+        const hora12 = hora24 % 12 || 12;
+
+        return `${dia} ${mes} ${anio}, ${hora12}:${minutos} ${periodo}`;
+    };
 
     return (
         <section className="overflow-hidden rounded-xl border bg-card">
