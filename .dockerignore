@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.env
+.env.*
+*.zip
+*.tar.gz
+*.log
+*.pem
+*.key
+*.tsbuildinfo
+coverage
+.vercel
+.vscode
+.agents
+.claude
+.windsurf
