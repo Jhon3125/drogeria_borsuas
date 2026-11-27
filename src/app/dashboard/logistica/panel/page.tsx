@@ -5,9 +5,14 @@ import { exigirRol } from "@/lib/guard";
 export default async function PanelLogistico() {
   const usuario = await exigirRol(["SUPER_ADMIN", "ADMIN", "ALMACEN", "CONDUCTOR"]);
   const conductor = usuario.rol === "CONDUCTOR";
-  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
-  const fechaInicio = new Date(`${hoy}T00:00:00.000Z`);
-  const fechaFin = new Date(fechaInicio.getTime() + 86400000);
+
+  const hoy = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/Lima",
+  });
+
+  const fechaInicio = new Date(`${hoy}T05:00:00.000Z`);
+  const fechaFin = new Date(fechaInicio.getTime() + 24 * 60 * 60 * 1000);
+
   const filtro = conductor ? { hojaRuta: { conductorId: Number(usuario.id) } } : {};
   const filtroHoy = conductor ? { hojaRuta: { conductorId: Number(usuario.id), fecha: { gte: fechaInicio, lt: fechaFin } } } : { hojaRuta: { fecha: { gte: fechaInicio, lt: fechaFin } } };
   const [hoyDespachos, pendientes, enRuta, entregados, reprogramados, vehiculos, conductores] = await Promise.all([

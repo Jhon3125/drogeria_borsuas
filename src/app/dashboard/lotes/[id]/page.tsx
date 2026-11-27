@@ -167,6 +167,27 @@ export default async function DetalleLotePage({
 
     if (!lote) notFound();
 
+    const asignacionesActivas = await prisma.asignacionLoteVenta.findMany({
+        where: {
+            loteId: lote.id,
+            detalleVenta: {
+                venta: {
+                    estado: {
+                        in: ["CONFIRMADA", "EN_PREPARACION"],
+                    },
+                },
+            },
+        },
+        select: {
+            cantidad: true,
+        },
+    });
+
+    const unidadesComprometidas = asignacionesActivas.reduce(
+        (total, asignacion) => total + asignacion.cantidad,
+        0
+    );
+
     const totalRecibido = lote.recepciones.reduce(
         (total, recepcion) => total + recepcion.cantidad,
         0
@@ -399,6 +420,7 @@ export default async function DetalleLotePage({
             <RetencionesPanel
                 loteId={lote.id}
                 stockFisico={lote.cantidadDisponible}
+                unidadesComprometidas={unidadesComprometidas}
                 puedeGestionar={puedeGestionarCalidad}
                 retenciones={lote.retenciones.map((retencion) => ({
                     id: retencion.id,

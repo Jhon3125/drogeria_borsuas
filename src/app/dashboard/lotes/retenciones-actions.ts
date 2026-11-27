@@ -142,9 +142,34 @@ export async function registrarRetencionLote(
                 0
             );
 
-            if (retenido + cantidad > lote.cantidadDisponible) {
+            // Consultar unidades comprometidas en ventas activas.
+            const asignaciones = await tx.asignacionLoteVenta.aggregate({
+                where: {
+                    loteId,
+                    detalleVenta: {
+                        venta: {
+                            estado: {
+                                in: ["CONFIRMADA", "EN_PREPARACION"],
+                            },
+                        },
+                    },
+                },
+                _sum: {
+                    cantidad: true,
+                },
+            });
+
+            const comprometido = asignaciones._sum.cantidad ?? 0;
+
+            // Calcular las unidades que realmente pueden retenerse.
+            const disponibleParaRetener = Math.max(
+                0,
+                lote.cantidadDisponible - retenido - comprometido
+            );
+
+            if (cantidad > disponibleParaRetener) {
                 throw new Error(
-                    `No hay suficientes unidades libres. Disponibles para retener: ${Math.max(0, lote.cantidadDisponible - retenido)}.`
+                    `No hay suficientes unidades libres. Disponibles para retener: ${disponibleParaRetener}. Retenidas: ${retenido}. Comprometidas en ventas: ${comprometido}.`
                 );
             }
 
