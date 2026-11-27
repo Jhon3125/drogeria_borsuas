@@ -26,6 +26,16 @@ const esquemaCalidad = z.object({
         .max(500, "El motivo no debe superar 500 caracteres."),
 });
 
+async function bloquearLote(
+    tx: Prisma.TransactionClient,
+    loteId: number
+) {
+    await tx.$queryRaw<{ adquirido: number }[]>`
+        SELECT 1::integer AS adquirido
+        FROM pg_advisory_xact_lock(847202, ${loteId})
+    `;
+}
+
 export type EstadoCambioCalidad =
     | { ok?: string; error?: string }
     | undefined;
@@ -62,6 +72,8 @@ export async function cambiarEstadoCalidadLote(
     try {
         await prisma.$transaction(
             async (tx) => {
+                await bloquearLote(tx, loteId);
+
                 const lote = await tx.lote.findUnique({
                     where: { id: loteId },
                     select: {
@@ -84,6 +96,46 @@ export async function cambiarEstadoCalidadLote(
                     throw new Error(
                         "El lote ya tiene ese estado de calidad."
                     );
+                }
+
+                // No permitir bloquear o poner en cuarentena
+                // lotes que tengan unidades comprometidas en ventas.
+                if (
+                    estadoCalidad === "CUARENTENA" ||
+                    estadoCalidad === "BLOQUEADO"
+                ) {
+                    const asignacionesActivas =
+                        await tx.asignacionLoteVenta.findMany({
+                            where: {
+                                loteId,
+                                detalleVenta: {
+                                    venta: {
+                                        estado: {
+                                            in: [
+                                                "CONFIRMADA",
+                                                "EN_PREPARACION",
+                                            ],
+                                        },
+                                    },
+                                },
+                            },
+                            select: {
+                                cantidad: true,
+                            },
+                        });
+
+                    const unidadesComprometidas =
+                        asignacionesActivas.reduce(
+                            (total, asignacion) =>
+                                total + asignacion.cantidad,
+                            0
+                        );
+
+                    if (unidadesComprometidas > 0) {
+                        throw new Error(
+                            `No se puede cambiar el estado del lote. Tiene ${unidadesComprometidas} unidades comprometidas en ventas. Retira o reasigna primero esas unidades.`
+                        );
+                    }
                 }
 
                 // Validamos que la administración de calidad no

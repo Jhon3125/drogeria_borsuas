@@ -142,6 +142,27 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
     venta.estado !== "ANULADA" &&
     saldoCalculado > 0;
 
+
+  const puedeProgramarRuta =
+    ["SUPER_ADMIN", "ADMIN", "ALMACEN"].includes(usuario.rol) &&
+    venta.estado !== "ANULADA" &&
+    venta.saldoPendiente.lte(0) &&
+    venta.importeTotal.greaterThan(0) &&
+    venta.detalles.length > 0 &&
+    venta.detalles.every(
+      (detalle) =>
+        detalle.asignacionesLote.reduce(
+          (total, asignacion) => total + asignacion.cantidad,
+          0
+        ) >= detalle.cantidad
+    ) &&
+    venta.despachos.every(
+      (despacho) =>
+        despacho.estado === "REPROGRAMADO" &&
+        despacho.devolucionInventarioEn !== null
+    );
+
+
   const pagos = (
     <section className={`${tarjeta} space-y-5`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -266,6 +287,37 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const despachos = <section className={`${tarjeta} space-y-4`}>
     <h2 className="flex items-center gap-2 font-bold text-[#123E70]"><Truck className="h-5 w-5" /> Despachos asociados</h2>
+
+    {["SUPER_ADMIN", "ADMIN", "ALMACEN"].includes(usuario.rol) && (
+      puedeProgramarRuta ? (
+        <div className="flex flex-col justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="font-semibold text-[#123E70]">
+              Venta lista para programación
+            </p>
+            <p className="mt-1 text-sm text-blue-800">
+              La venta está pagada y todos sus productos tienen lotes asignados.
+              Ya puedes incorporarla a una hoja de ruta.
+            </p>
+          </div>
+
+          <Link
+            href={`/dashboard/logistica/rutas?ventaId=${venta.id}`}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#123E70] px-4 text-sm font-semibold text-white transition hover:bg-[#0D315B]"
+          >
+            <Truck className="h-4 w-4" />
+            Programar ruta
+          </Link>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Para programar esta venta, verifica que esté completamente pagada,
+          tenga todos sus productos asignados a lotes y que cualquier despacho
+          anterior tenga su devolución de inventario confirmada.
+        </div>
+      )
+    )}
+
     {venta.despachos.length ? venta.despachos.map((d) => (
       <div key={d.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

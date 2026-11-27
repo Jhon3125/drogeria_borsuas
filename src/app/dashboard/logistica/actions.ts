@@ -17,6 +17,17 @@ function texto(d: FormData, clave: string, max: number) {
   if (!v || v.length > max) throw new Error(`Valor inválido: ${clave}`);
   return v;
 }
+
+async function bloquearLote(
+  tx: Prisma.TransactionClient,
+  loteId: number
+) {
+  await tx.$queryRaw<{ adquirido: number }[]>`
+    SELECT 1::integer AS adquirido
+    FROM pg_advisory_xact_lock(847202, ${loteId})
+  `;
+}
+
 function exito(path: string) {
   revalidatePath("/dashboard/logistica/vehiculos");
   revalidatePath("/dashboard/logistica/rutas");
@@ -62,10 +73,10 @@ export async function crearRuta(d: FormData) {
     ]);
     if (!conductor || !vehiculo) throw new Error("Conductor o vehículo no disponible.");
     if (ventas.length !== ids.length) throw new Error("Hay ventas no pagadas, anuladas o con un despacho sin devolución confirmada.");
-    if (ventas.some(v => v.detalles.length === 0 || v.detalles.some(det => det.asignacionesLote.reduce((n,a) => n+a.cantidad, 0) < det.cantidad))) throw new Error("Hay ventas sin lotes suficientes asignados.");
+    if (ventas.some(v => v.detalles.length === 0 || v.detalles.some(det => det.asignacionesLote.reduce((n, a) => n + a.cantidad, 0) < det.cantidad))) throw new Error("Hay ventas sin lotes suficientes asignados.");
     const fecha = new Date(`${fechaRaw}T12:00:00.000Z`);
     const diaInicio = new Date(`${fechaRaw}T00:00:00.000Z`);
-    const diaFin = new Date(diaInicio.getTime()+86400000);
+    const diaFin = new Date(diaInicio.getTime() + 86400000);
     const duplicados = await tx.hojaRuta.count({ where: { fecha: { gte: diaInicio, lt: diaFin }, OR: [{ conductorId }, { vehiculoId }], despachos: { some: { estado: { in: ["PENDIENTE", "EN_RUTA"] } } } } });
     if (duplicados) throw new Error("Conductor o vehículo con otra ruta activa ese día.");
     await tx.hojaRuta.create({ data: { conductorId, vehiculoId, fecha, despachos: { create: ids.map(ventaId => ({ ventaId })) } } });
@@ -90,15 +101,17 @@ export async function actualizarDespacho(d: FormData) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(adjunto.type)) throw new Error("Solo se admiten imágenes JPG, PNG o WEBP.");
     const contenido = new Uint8Array<ArrayBuffer>(await adjunto.arrayBuffer());
     const jpg = contenido.length > 3 && contenido[0] === 0xff && contenido[1] === 0xd8 && contenido[2] === 0xff;
-    const png = contenido.length > 8 && [137,80,78,71,13,10,26,10].every((x,i)=>contenido[i]===x);
-    const webp = contenido.length > 12 && String.fromCharCode(...contenido.slice(0,4)) === "RIFF" && String.fromCharCode(...contenido.slice(8,12)) === "WEBP";
-    if (!((adjunto.type==="image/jpeg" && jpg)||(adjunto.type==="image/png" && png)||(adjunto.type==="image/webp" && webp))) throw new Error("El contenido no corresponde a una imagen válida.");
+    const png = contenido.length > 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((x, i) => contenido[i] === x);
+    const webp = contenido.length > 12 && String.fromCharCode(...contenido.slice(0, 4)) === "RIFF" && String.fromCharCode(...contenido.slice(8, 12)) === "WEBP";
+    if (!((adjunto.type === "image/jpeg" && jpg) || (adjunto.type === "image/png" && png) || (adjunto.type === "image/webp" && webp))) throw new Error("El contenido no corresponde a una imagen válida.");
     foto = { contenido, tipoMime: adjunto.type, nombre: adjunto.name.slice(0, 150) || "entrega" };
   }
   await prisma.$transaction(async tx => {
     const despacho = await tx.despacho.findUnique({
-      where: { id }, include: { hojaRuta: true, detalles: { select: { id: true } },
-        venta: { include: { detalles: { include: { asignacionesLote: true } } } } },
+      where: { id }, include: {
+        hojaRuta: true, detalles: { select: { id: true } },
+        venta: { include: { detalles: { include: { asignacionesLote: true } } } }
+      },
     });
     if (!despacho) throw new Error("Despacho inexistente.");
     if (usuario.rol === "CONDUCTOR" && despacho.hojaRuta?.conductorId !== Number(usuario.id)) throw new Error("No es tu despacho.");
@@ -108,13 +121,15 @@ export async function actualizarDespacho(d: FormData) {
       throw new Error("Despacho parcial o sin hoja de ruta: gestiona la entrega desde su flujo específico. No se modificó el inventario.");
     }
     if ((estado === "EN_RUTA" && despacho.estado !== "PENDIENTE") ||
-       (["ENTREGADO", "REPROGRAMADO"].includes(estado) && despacho.estado !== "EN_RUTA")) throw new Error("Transición de estado no permitida.");
+      (["ENTREGADO", "REPROGRAMADO"].includes(estado) && despacho.estado !== "EN_RUTA")) throw new Error("Transición de estado no permitida.");
     if (despacho.venta.estado === "ANULADA") throw new Error("La venta está anulada.");
     const resultado = await tx.despacho.updateMany({
       where: { id, estado: despacho.estado },
-      data: { estado: estado as "EN_RUTA" | "ENTREGADO" | "REPROGRAMADO", observacion: observacion || null,
+      data: {
+        estado: estado as "EN_RUTA" | "ENTREGADO" | "REPROGRAMADO", observacion: observacion || null,
         ...(estado === "EN_RUTA" ? { salidaInventarioEn: new Date() } : {}),
-        ...(estado === "ENTREGADO" ? { receptor, entregadoEn: new Date() } : {}) },
+        ...(estado === "ENTREGADO" ? { receptor, entregadoEn: new Date() } : {})
+      },
     });
     if (resultado.count !== 1) throw new Error("Otro usuario modificó el despacho. Recarga la pantalla.");
     if (estado === "EN_RUTA") {
@@ -123,42 +138,95 @@ export async function actualizarDespacho(d: FormData) {
       if (!despacho.venta.detalles.length) throw new Error("La venta no tiene productos.");
       const cantidades = new Map<number, { productoId: number; cantidad: number }>();
       for (const detalle of despacho.venta.detalles) {
-        const asignado = detalle.asignacionesLote.reduce((n,a)=>n+a.cantidad,0);
+        const asignado = detalle.asignacionesLote.reduce((n, a) => n + a.cantidad, 0);
         if (asignado !== detalle.cantidad) throw new Error("Los lotes asignados no coinciden con la venta.");
         for (const a of detalle.asignacionesLote) {
           const previo = cantidades.get(a.loteId);
           if (previo && previo.productoId !== detalle.productoId) throw new Error("Lote inconsistente.");
-          cantidades.set(a.loteId, { productoId: detalle.productoId, cantidad: (previo?.cantidad ?? 0)+a.cantidad });
+          cantidades.set(a.loteId, { productoId: detalle.productoId, cantidad: (previo?.cantidad ?? 0) + a.cantidad });
         }
       }
+
+      const idsLotesOrdenados = [...cantidades.keys()].sort(
+        (a, b) => a - b
+      );
+
+      for (const loteId of idsLotesOrdenados) {
+        await bloquearLote(tx, loteId);
+      }
+      
+      const ahora = new Date();
+
       for (const [loteId, item] of cantidades) {
         const descontado = await tx.lote.updateMany({
-          where: { id: loteId, productoId: item.productoId, estadoCalidad: "DISPONIBLE", cantidadDisponible: { gte: item.cantidad } },
-          data: { cantidadDisponible: { decrement: item.cantidad } },
+          where: {
+            id: loteId,
+            productoId: item.productoId,
+            estadoCalidad: "DISPONIBLE",
+            fechaVencimiento: { gt: ahora },
+            cantidadDisponible: { gte: item.cantidad },
+          },
+          data: {
+            cantidadDisponible: { decrement: item.cantidad },
+          },
         });
-        if (descontado.count !== 1) throw new Error(`Stock insuficiente o lote bloqueado: ${loteId}.`);
-        const producto = await tx.producto.updateMany({ where: { id: item.productoId, stockActual: { gte: item.cantidad } }, data: { stockActual: { decrement: item.cantidad } } });
-        if (producto.count !== 1) throw new Error(`Stock global insuficiente: ${item.productoId}.`);
-        await tx.movimientoInventario.create({ data: { loteId, productoId: item.productoId, usuarioId: Number(usuario.id), tipo: "SALIDA_VENTA", cantidad: item.cantidad, motivo: `Salida despacho #${id}, venta #${despacho.ventaId}` } });
+
+        if (descontado.count !== 1) {
+          throw new Error(
+            `Stock insuficiente, lote vencido o bloqueado: ${loteId}.`
+          );
+        }
+
+        const producto = await tx.producto.updateMany({
+          where: {
+            id: item.productoId,
+            stockActual: { gte: item.cantidad },
+          },
+          data: {
+            stockActual: { decrement: item.cantidad },
+          },
+        });
+
+        if (producto.count !== 1) {
+          throw new Error(`Stock global insuficiente: ${item.productoId}.`);
+        }
+
+        await tx.movimientoInventario.create({
+          data: {
+            loteId,
+            productoId: item.productoId,
+            usuarioId: Number(usuario.id),
+            tipo: "SALIDA_VENTA",
+            cantidad: item.cantidad,
+            motivo: `Salida despacho #${id}, venta #${despacho.ventaId}`,
+          },
+        });
       }
-      await tx.venta.update({ where: { id: despacho.ventaId }, data: { estado: "DESPACHADA" } });
+
+      await tx.venta.update({
+        where: { id: despacho.ventaId },
+        data: { estado: "DESPACHADA" },
+      });
     }
+
     if (estado === "ENTREGADO") {
       if (!despacho.salidaInventarioEn) throw new Error("La salida física no está registrada.");
       await tx.evidenciaEntrega.create({ data: { despachoId: id, ...foto! } });
       await tx.venta.update({ where: { id: despacho.ventaId }, data: { estado: "COMPLETADA" } });
     }
-    await tx.historialDespacho.create({ data: {
-      despachoId: id, usuarioId: Number(usuario.id), estadoAnterior: despacho.estado,
-      estadoNuevo: estado as "EN_RUTA" | "ENTREGADO" | "REPROGRAMADO", observacion: observacion || null,
-    } });
+    await tx.historialDespacho.create({
+      data: {
+        despachoId: id, usuarioId: Number(usuario.id), estadoAnterior: despacho.estado,
+        estadoNuevo: estado as "EN_RUTA" | "ENTREGADO" | "REPROGRAMADO", observacion: observacion || null,
+      }
+    });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 });
   revalidatePath("/dashboard/ventas");
   revalidatePath(`/dashboard/logistica/despachos`);
   revalidatePath("/dashboard/logistica/rutas");
   revalidatePath("/dashboard/inventario");
   revalidatePath("/dashboard/inventario/movimientos");
-  redirect("/dashboard/logistica/despachos?ok=actualizado");
+  redirect(destinoDespacho(d, id) + "?ok=actualizado");
 }
 
 
@@ -169,6 +237,7 @@ export async function recibirDevolucionDespacho(d: FormData) {
   const usuario = await exigirRol(["SUPER_ADMIN", "ADMIN", "ALMACEN"]);
   const id = numero(d, "id");
   const motivo = texto(d, "motivo", 500);
+
   if (d.get("inspeccion") !== "confirmada") throw new Error("Confirma que se recibieron y revisaron físicamente todas las unidades.");
   await prisma.$transaction(async tx => {
     const despacho = await tx.despacho.findUnique({
@@ -223,13 +292,25 @@ export async function recibirDevolucionDespacho(d: FormData) {
       });
       if (loteActualizado.count !== 1) throw new Error(`El lote ${loteId} excedería su cantidad inicial.`);
       await tx.producto.update({ where: { id: item.productoId }, data: { stockActual: { increment: item.cantidad } } });
-      await tx.movimientoInventario.create({ data: {
-        loteId, productoId: item.productoId, usuarioId: Number(usuario.id), tipo: "ENTRADA_DEVOLUCION",
-        cantidad: item.cantidad, motivo: `Devolución despacho #${id}, venta #${despacho.ventaId}: ${motivo}`,
-      } });
+      await tx.movimientoInventario.create({
+        data: {
+          loteId, productoId: item.productoId, usuarioId: Number(usuario.id), tipo: "ENTRADA_DEVOLUCION",
+          cantidad: item.cantidad, motivo: `Devolución despacho #${id}, venta #${despacho.ventaId}: ${motivo}`,
+        }
+      });
     }
     await tx.venta.update({ where: { id: despacho.ventaId }, data: { estado: "EN_PREPARACION" } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 });
   for (const ruta of ["/dashboard/logistica/despachos", "/dashboard/logistica/panel", "/dashboard/logistica/movimientos", "/dashboard/inventario", "/dashboard/ventas"]) revalidatePath(ruta);
-  redirect("/dashboard/logistica/despachos?ok=devuelto");
+  redirect(destinoDespacho(d, id) + "?ok=devuelto");
+}
+
+function destinoDespacho(d: FormData, id: number) {
+  const solicitado = String(d.get("returnTo") ?? "");
+
+  if (solicitado === `/dashboard/logistica/despachos/${id}`) {
+    return solicitado;
+  }
+
+  return "/dashboard/logistica/despachos";
 }

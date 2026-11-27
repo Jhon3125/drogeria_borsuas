@@ -35,6 +35,7 @@ type Retencion = {
 type Props = {
     loteId: number;
     stockFisico: number;
+    unidadesComprometidas: number;
     retenciones: Retencion[];
     puedeGestionar: boolean;
 };
@@ -255,6 +256,7 @@ function LiberarRetencion({
 export function RetencionesPanel({
     loteId,
     stockFisico,
+    unidadesComprometidas,
     retenciones,
     puedeGestionar,
 }: Props) {
@@ -262,14 +264,42 @@ export function RetencionesPanel({
         .filter((retencion) => retencion.estado === "ACTIVA")
         .reduce((total, retencion) => total + retencion.cantidad, 0);
 
-    const libres = Math.max(0, stockFisico - retenidas);
+    const libres = Math.max(
+        0,
+        stockFisico - retenidas - unidadesComprometidas
+    );
 
-    const fecha = (valor: string) =>
-        new Intl.DateTimeFormat("es-PE", {
-            dateStyle: "medium",
-            timeStyle: "short",
-            timeZone: "America/Lima",
-        }).format(new Date(valor));
+    const fecha = (valor: string) => {
+        const fechaUTC = new Date(valor);
+
+        if (Number.isNaN(fechaUTC.getTime())) {
+            return "Fecha inválida";
+        }
+
+        // Convertir UTC a hora de Perú (UTC-5).
+        const fechaLima = new Date(
+            fechaUTC.getTime() - 5 * 60 * 60 * 1000
+        );
+
+        const dia = String(fechaLima.getUTCDate()).padStart(2, "0");
+
+        const meses = [
+            "ene.", "feb.", "mar.", "abr.",
+            "may.", "jun.", "jul.", "ago.",
+            "sep.", "oct.", "nov.", "dic.",
+        ];
+
+        const mes = meses[fechaLima.getUTCMonth()];
+        const anio = fechaLima.getUTCFullYear();
+
+        const hora24 = fechaLima.getUTCHours();
+        const minutos = String(fechaLima.getUTCMinutes()).padStart(2, "0");
+
+        const periodo = hora24 >= 12 ? "p. m." : "a. m.";
+        const hora12 = hora24 % 12 || 12;
+
+        return `${dia} ${mes} ${anio}, ${hora12}:${minutos} ${periodo}`;
+    };
 
     return (
         <section className="overflow-hidden rounded-xl border bg-card">
@@ -286,7 +316,7 @@ export function RetencionesPanel({
                 </div>
             </div>
 
-            <div className="grid gap-3 p-5 sm:grid-cols-3">
+            <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-lg bg-secondary/30 p-4">
                     <p className="text-xs text-muted-foreground">
                         Stock físico
@@ -305,9 +335,18 @@ export function RetencionesPanel({
                     </p>
                 </div>
 
+                <div className="rounded-lg bg-blue-50 p-4">
+                    <p className="text-xs text-blue-800">
+                        Comprometidas en ventas
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-blue-800">
+                        {unidadesComprometidas}
+                    </p>
+                </div>
+
                 <div className="rounded-lg bg-emerald-50 p-4">
                     <p className="text-xs text-emerald-800">
-                        Unidades sin retención parcial
+                        Unidades libres para retener
                     </p>
                     <p className="mt-2 text-2xl font-bold text-emerald-800">
                         {libres}
@@ -349,8 +388,8 @@ export function RetencionesPanel({
 
                                     <span
                                         className={`rounded-full px-2 py-1 text-xs ${retencion.estado === "ACTIVA"
-                                                ? "bg-amber-50 text-amber-700"
-                                                : "bg-emerald-50 text-emerald-700"
+                                            ? "bg-amber-50 text-amber-700"
+                                            : "bg-emerald-50 text-emerald-700"
                                             }`}
                                     >
                                         {retencion.estado === "ACTIVA"
