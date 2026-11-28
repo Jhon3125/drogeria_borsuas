@@ -51,7 +51,11 @@ export async function cambiarVehiculo(d: FormData) {
   if (!vehiculo) throw new Error("Vehículo inexistente.");
   if (vehiculo.estado) {
     const asignadas = await prisma.hojaRuta.count({ where: { vehiculoId: id, despachos: { some: { estado: { in: ["PENDIENTE", "EN_RUTA"] } } } } });
-    if (asignadas) throw new Error("El vehículo tiene despachos activos.");
+    if (asignadas) {
+      redirect(
+        "/dashboard/logistica/vehiculos?error=vehiculo-con-rutas-activas"
+      );
+    }
   }
   await prisma.vehiculo.update({ where: { id }, data: { estado: !vehiculo.estado } });
   exito("/dashboard/logistica/vehiculos?ok=actualizado");
@@ -69,10 +73,41 @@ export async function crearRuta(d: FormData) {
     const [conductor, vehiculo, ventas] = await Promise.all([
       tx.usuario.findFirst({ where: { id: conductorId, rol: "CONDUCTOR", estado: "ACTIVO" } }),
       tx.vehiculo.findFirst({ where: { id: vehiculoId, estado: true } }),
-      tx.venta.findMany({ where: { id: { in: ids }, estado: { not: "ANULADA" }, saldoPendiente: { lte: 0 }, importeTotal: { gt: 0 }, despachos: { every: { estado: "REPROGRAMADO", devolucionInventarioEn: { not: null } } } }, select: { id: true, detalles: { select: { cantidad: true, asignacionesLote: { select: { cantidad: true } } } } } }),
+      tx.venta.findMany({
+        where: { id: { in: ids }, estado: { not: "ANULADA" }, saldoPendiente: { lte: 0 }, importeTotal: { gt: 0 }, despachos: { every: { estado: "REPROGRAMADO", devolucionInventarioEn: { not: null } } } }, select: {
+          id: true,
+          importeTotal: true,
+          pagos: {
+            select: { monto: true },
+          },
+          detalles: {
+            select: {
+              cantidad: true,
+              asignacionesLote: {
+                select: { cantidad: true },
+              },
+            },
+          },
+        }
+      })
     ]);
     if (!conductor || !vehiculo) throw new Error("Conductor o vehículo no disponible.");
-    if (ventas.length !== ids.length) throw new Error("Hay ventas no pagadas, anuladas o con un despacho sin devolución confirmada.");
+    if (ventas.length !== ids.length) {
+      throw new Error("Hay ventas anuladas, sin importe válido o con un despacho sin devolución confirmada.");
+    }
+
+    const hayVentasConDeuda = ventas.some((venta) => {
+      const totalPagado = venta.pagos.reduce(
+        (total, pago) => total.add(pago.monto),
+        new Prisma.Decimal(0)
+      );
+
+      return totalPagado.lessThan(venta.importeTotal);
+    });
+
+    if (hayVentasConDeuda) {
+      throw new Error("Hay ventas con saldo pendiente. Registra los cobros antes de programar la ruta.");
+    }
     if (ventas.some(v => v.detalles.length === 0 || v.detalles.some(det => det.asignacionesLote.reduce((n, a) => n + a.cantidad, 0) < det.cantidad))) throw new Error("Hay ventas sin lotes suficientes asignados.");
     const fecha = new Date(`${fechaRaw}T12:00:00.000Z`);
     const diaInicio = new Date(`${fechaRaw}T00:00:00.000Z`);
@@ -110,7 +145,18 @@ export async function actualizarDespacho(d: FormData) {
     const despacho = await tx.despacho.findUnique({
       where: { id }, include: {
         hojaRuta: true, detalles: { select: { id: true } },
-        venta: { include: { detalles: { include: { asignacionesLote: true } } } }
+        venta: {
+          include: {
+            pagos: {
+              select: { monto: true },
+            },
+            detalles: {
+              include: {
+                asignacionesLote: true,
+              },
+            },
+          },
+        },
       },
     });
     if (!despacho) throw new Error("Despacho inexistente.");
@@ -123,6 +169,16 @@ export async function actualizarDespacho(d: FormData) {
     if ((estado === "EN_RUTA" && despacho.estado !== "PENDIENTE") ||
       (["ENTREGADO", "REPROGRAMADO"].includes(estado) && despacho.estado !== "EN_RUTA")) throw new Error("Transición de estado no permitida.");
     if (despacho.venta.estado === "ANULADA") throw new Error("La venta está anulada.");
+    if (estado === "EN_RUTA") {
+      const totalPagado = despacho.venta.pagos.reduce(
+        (total, pago) => total.add(pago.monto),
+        new Prisma.Decimal(0)
+      );
+
+      if (totalPagado.lessThan(despacho.venta.importeTotal)) {
+        throw new Error("La venta tiene saldo pendiente. No se puede iniciar el despacho.");
+      }
+    }
     const resultado = await tx.despacho.updateMany({
       where: { id, estado: despacho.estado },
       data: {
@@ -154,7 +210,7 @@ export async function actualizarDespacho(d: FormData) {
       for (const loteId of idsLotesOrdenados) {
         await bloquearLote(tx, loteId);
       }
-      
+
       const ahora = new Date();
 
       for (const [loteId, item] of cantidades) {

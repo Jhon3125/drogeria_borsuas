@@ -146,7 +146,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   const puedeProgramarRuta =
     ["SUPER_ADMIN", "ADMIN", "ALMACEN"].includes(usuario.rol) &&
     venta.estado !== "ANULADA" &&
-    venta.saldoPendiente.lte(0) &&
+    saldoCalculado <= 0 &&
     venta.importeTotal.greaterThan(0) &&
     venta.detalles.length > 0 &&
     venta.detalles.every(

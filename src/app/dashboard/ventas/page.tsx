@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirRol } from "@/lib/guard";
 import { ListadoVentas } from "./listado-ventas";
 import { ShoppingCart, PackageCheck, ClipboardList, Truck } from "lucide-react";
+import { Prisma } from "@/generated/prisma/client";
 
 export default async function VentasPage() {
   const usuario = await exigirRol(["SUPER_ADMIN", "ADMIN", "COMERCIAL", "ALMACEN"]);
@@ -18,7 +19,14 @@ export default async function VentasPage() {
         cotizacion: { select: { id: true, version: true } },
         oportunidad: { select: { id: true } },
         detalles: { select: { cantidad: true, asignacionesLote: { select: { cantidad: true } } } },
-        despachos: { select: { estado: true }, take: 1 },
+        despachos: {
+          select: { estado: true },
+          orderBy: { id: "desc" },
+          take: 1,
+        },
+        pagos: {
+          select: { monto: true },
+        },
       },
     }),
     prisma.venta.groupBy({ by: ["estado"], where, _count: { _all: true } }),
@@ -27,6 +35,15 @@ export default async function VentasPage() {
   const registros = ventas.map((v) => {
     const requeridas = v.detalles.reduce((total, d) => total + d.cantidad, 0);
     const asignadas = v.detalles.reduce((total, d) => total + d.asignacionesLote.reduce((n, a) => n + a.cantidad, 0), 0);
+    const pagado = v.pagos.reduce(
+      (total, pago) => total.add(pago.monto),
+      new Prisma.Decimal(0)
+    );
+
+    const saldoReal = v.importeTotal.minus(pagado);
+    const saldoPendienteReal = saldoReal.greaterThan(0)
+      ? saldoReal
+      : new Prisma.Decimal(0);
     return {
       id: v.id,
       fecha: v.fecha.toISOString(),
@@ -34,10 +51,10 @@ export default async function VentasPage() {
       documento: v.cliente.documento ?? "",
       vendedor: v.vendedor.nombre,
       estado: v.estado,
-      estadoVisual: v.despachos[0] ? (v.despachos[0].estado === "PENDIENTE" ? "PROGRAMADO" : v.despachos[0].estado === "EN_RUTA" ? "EN_RUTA" : v.despachos[0].estado === "REPROGRAMADO" ? "REPROGRAMADO" : "COMPLETADA") : (v.detalles.length && v.detalles.every(d => d.asignacionesLote.reduce((n,a)=>n+a.cantidad,0) === d.cantidad) && v.saldoPendiente.lte(0) && v.estado !== "ANULADA" ? "LISTO_PARA_DESPACHO" : v.estado),
+      estadoVisual: v.despachos[0] ? (v.despachos[0].estado === "PENDIENTE" ? "PROGRAMADO" : v.despachos[0].estado === "EN_RUTA" ? "EN_RUTA" : v.despachos[0].estado === "REPROGRAMADO" ? "REPROGRAMADO" : "COMPLETADA") : (v.detalles.length && v.detalles.every(d => d.asignacionesLote.reduce((n, a) => n + a.cantidad, 0) === d.cantidad) && saldoPendienteReal.lte(0) && v.estado !== "ANULADA" ? "LISTO_PARA_DESPACHO" : v.estado),
       moneda: v.moneda,
       total: v.importeTotal.toFixed(2),
-      saldo: v.saldoPendiente.toFixed(2),
+      saldo: saldoPendienteReal.toFixed(2),
       productos: v.detalles.length,
       requeridas,
       asignadas,
