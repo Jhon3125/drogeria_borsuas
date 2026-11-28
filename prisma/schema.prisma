@@ -135,6 +135,21 @@ enum ResultadoActividadComercial {
   CALIFICADO
 }
 
+enum CategoriaNotificacion {
+  INVENTARIO
+  COMPRAS
+  VENTAS
+  LOGISTICA
+  FINANZAS
+  SISTEMA
+}
+
+enum PrioridadNotificacion {
+  INFO
+  ADVERTENCIA
+  CRITICA
+}
+
 // ==========================================
 // M├ôDULO 1: USUARIOS Y ROLES (H0001, H0002)
 // ==========================================
@@ -169,6 +184,7 @@ model Usuario {
   actividadesComerciales   ActividadComercial[]   @relation("ResponsableActividadComercial")
   cobrosRegistrados        Pago[]                 @relation("ResponsableCobro")
   historialDespachos       HistorialDespacho[]    @relation("AutorHistorialDespacho")
+  notificaciones           Notificacion[]
 }
 
 // ==========================================
@@ -437,15 +453,15 @@ model AsignacionLoteVenta {
 }
 
 model Pago {
-  id              Int        @id @default(autoincrement())
-  ventaId         Int
-  monto           Decimal    @db.Decimal(12, 2)
-  fecha           DateTime   @default(now())
-  claveOperacion  String?    @unique @db.Uuid
-  claveIdempotencia String? @unique @db.VarChar(64)
-  referencia      String?    @db.VarChar(120)
-  registradoPorId Int?
-  metodoPago      MetodoPago
+  id                Int        @id @default(autoincrement())
+  ventaId           Int
+  monto             Decimal    @db.Decimal(12, 2)
+  fecha             DateTime   @default(now())
+  claveOperacion    String?    @unique @db.Uuid
+  claveIdempotencia String?    @unique @db.VarChar(64)
+  referencia        String?    @db.VarChar(120)
+  registradoPorId   Int?
+  metodoPago        MetodoPago
 
   registradoPor Usuario? @relation("ResponsableCobro", fields: [registradoPorId], references: [id], onDelete: SetNull)
   venta         Venta    @relation(fields: [ventaId], references: [id])
@@ -627,21 +643,21 @@ model HojaRuta {
 }
 
 model Despacho {
-  id                 Int            @id @default(autoincrement())
-  hojaRutaId         Int?
-  ventaId            Int
-  estado             EstadoDespacho @default(PENDIENTE)
-  observacion        String?
-  fechaCreacion      DateTime       @default(now())
-  salidaInventarioEn DateTime?
+  id                     Int            @id @default(autoincrement())
+  hojaRutaId             Int?
+  ventaId                Int
+  estado                 EstadoDespacho @default(PENDIENTE)
+  observacion            String?
+  fechaCreacion          DateTime       @default(now())
+  salidaInventarioEn     DateTime?
   devolucionInventarioEn DateTime?
-  devolucionMotivo   String?        @db.VarChar(500)
-  receptor           String?        @db.VarChar(120)
-  entregadoEn        DateTime?
-  fechaActualizacion DateTime       @updatedAt
+  devolucionMotivo       String?        @db.VarChar(500)
+  receptor               String?        @db.VarChar(120)
+  entregadoEn            DateTime?
+  fechaActualizacion     DateTime       @updatedAt
 
-  hojaRuta HojaRuta?         @relation(fields: [hojaRutaId], references: [id], onDelete: SetNull)
-  venta    Venta             @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  hojaRuta  HojaRuta?           @relation(fields: [hojaRutaId], references: [id], onDelete: SetNull)
+  venta     Venta               @relation(fields: [ventaId], references: [id], onDelete: Restrict)
   detalles  DetalleDespacho[]
   historial HistorialDespacho[]
   evidencia EvidenciaEntrega?
@@ -770,7 +786,33 @@ model HistorialOrdenPago {
 }
 
 model ConfiguracionSistema {
-  id Int @id @default(1)
-  diasAlertaVencimiento Int @default(90)
-  actualizadoEn DateTime @default(now()) @updatedAt
+  id                    Int      @id @default(1)
+  diasAlertaVencimiento Int      @default(90)
+  actualizadoEn         DateTime @default(now()) @updatedAt
+}
+
+model Notificacion {
+  id        Int                   @id @default(autoincrement())
+  usuarioId Int
+  categoria CategoriaNotificacion
+  prioridad PrioridadNotificacion @default(INFO)
+
+  titulo  String  @db.VarChar(160)
+  mensaje String  @db.Text
+  enlace  String? @db.VarChar(300)
+
+  // Identificador para evitar notificaciones duplicadas.
+  claveUnica String @db.VarChar(191)
+
+  leidaEn       DateTime?
+  resueltaEn    DateTime?
+  creadaEn      DateTime  @default(now())
+  actualizadaEn DateTime  @updatedAt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, claveUnica])
+  @@index([usuarioId, leidaEn, creadaEn])
+  @@index([usuarioId, resueltaEn])
+  @@index([categoria, creadaEn])
 }
